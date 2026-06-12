@@ -1,0 +1,100 @@
+version: "3"
+
+dotenv:
+  - .env
+
+vars:
+  API_IMAGE_LOCAL: "zen:5000/yowapi:latest"
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list --sort none
+
+  build:dist:
+    desc: Build yowapi dist folder with all dependencies
+    cmds:
+      - mkdir -p dist
+      - task gobuild
+      - task personalities
+      - task certs
+
+  build:image:
+    desc: Build local API Docker image
+    cmds:
+      - docker image rm {{.API_IMAGE_LOCAL}} || true
+      - docker build -t {{.API_IMAGE_LOCAL}} .
+
+  gobuild:
+    desc: Build yowapi binary into dist/
+    cmds:
+      - GOOS=linux CGO_ENABLED=0 go build -o dist/yowapi ./cmd/yowapi
+
+  personalities:
+    desc: Download personalities.json into dist/
+    cmds:
+      - mkdir -p dist
+      - curl -fsSL https://yeoldwizard.com/personalities.json -o dist/personalities.json
+
+  certs:
+    desc: Generate local TLS cert/key in dist/certs
+    cmds:
+      - mkdir -p dist/certs
+      - >
+        openssl req -new -newkey rsa:2048 -days 365 -nodes -x509
+        -subj "/C=US/O=ACME/CN=yeoldwiz.localhost"
+        -keyout dist/certs/key.pem -out dist/certs/cert.pem
+  
+  run:
+    desc: Build dist and run yowapi from dist/
+    cmds:
+      - bash -lc 'source .env; cd dist && go run ../cmd/yowapi'
+
+  test:
+    desc: Run Go tests with env loaded
+    cmds:
+      - bash -lc 'source .env; export ROOT_DIR=$(pwd); go test ./...'
+
+  run:image:
+    desc: Run API image interactively for troubleshooting
+    cmds:
+      - docker rm yowapi || true
+      - >
+        docker run --rm -it --name yowapi -p 8080:8080
+        -e JWT_KEY=XG6paWLxhsCiVcOMDF3YXWYZLeb8oyrYjyPKqbld
+        -e NATS_TOKEN=tYlZBeYnAEfAJofInCML53ot3ibrFJWWCpdaIYRx
+        -e NATS_URL=nats:4222
+        {{.API_IMAGE_LOCAL}} /bin/ash
+
+  up:
+    desc: Start the local deploy stack
+    dir: deploy
+    cmds:
+      - docker compose -f compose.yaml up -d
+
+  down:
+    desc: Stop the local deploy stack
+    dir: deploy
+    cmds:
+      - docker compose -f compose.yaml down
+
+  jot:
+    desc: Install jot CLI
+    cmds:
+      - go install ./cmd/jot/
+
+  clean:all:
+    desc: Remove local build artifacts and API image/container
+    deps: [clean:dist, clean:images]
+
+  clean:dist:
+    desc: Remove dist folder
+    cmds:
+      - rm -rf dist
+
+  clean:images:
+    desc: Remove local API image/container
+    cmds:
+      - docker rm -f yowapi || true
+      - docker rmi {{.API_IMAGE_LOCAL}} || true

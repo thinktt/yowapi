@@ -1,0 +1,4 @@
+#!/bin/sh -e
+
+echo "0" > /sys/devices/system/cpu/cpufreq/boost
+exit 0

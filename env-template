@@ -1,0 +1,8 @@
+export JWT_KEY=
+export NATS_TOKEN=
+export NATS_URL=
+export PORT=
+export MONGO_HOST=
+export ADMIN_USER=
+export LICHESS_TOKEN=
+# export GIN_MODE=

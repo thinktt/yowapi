@@ -1,0 +1,59 @@
+services:
+  nats:
+    image: nats:latest
+    container_name: nats
+    networks: 
+      - yow
+    command: ["-js", "-auth", "${NATS_TOKEN}"]
+    # ports:
+    #   - "4222:4222"
+    #   - "8222:8222"
+    restart: 
+      unless-stopped
+  
+  yowapi:
+    image: zen:5000/yowapi:latest
+    container_name: yowapi
+    environment:
+      - MONGO_HOST=mongodb
+      - GIN_MODE=debug
+      - PORT=8443
+      - NATS_TOKEN=${NATS_TOKEN}
+      - NATS_URL=${NATS_URL}
+      - JWT_KEY=${JWT_KEY}
+      - ADMIN_USER=${ADMIN_USER}
+      - LICHESS_TOKEN=${LICHESS_TOKEN}
+    networks:
+      - yow
+      - mongonet
+      - proxynet
+    depends_on:
+      - mongodb
+      - nats
+    restart: unless-stopped
+    ports: 
+      - 8443:8443
+
+
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    networks:
+      - mongonet
+    # ports:
+    #   - "27017:27017"
+    volumes:
+      - mongodb:/data/db
+    restart: unless-stopped
+
+networks: 
+  yow: 
+    external: true
+  mongonet:
+    external: true
+  proxynet:
+    external: true
+
+volumes:
+  mongodb:
+    external: true

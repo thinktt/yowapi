@@ -1,6 +1,6 @@
-# Yow API
+# Ye Old Wizard API (yowapi)
 
-This repo contains the Yow API service used by Ye Old Wizard.
+This repo contains the api used by Ye Old Wizard.
 
 The local backend stack started here is:
 

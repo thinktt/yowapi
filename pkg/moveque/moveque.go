@@ -15,6 +15,12 @@ var log = logrus.New()
 var moveStream nats.JetStreamContext
 var nc *nats.Conn
 
+const moveReqStreamName = "move-req-stream"
+const moveResStreamName = "move-res-stream"
+const moveReqSubject = "move-req"
+
+var moveReqStreamSubjects = []string{moveReqSubject, moveReqSubject + ".*"}
+
 func init() {
 	var err error
 
@@ -42,29 +48,47 @@ func init() {
 		log.Fatalf("Error creating JetStream context: %v", err)
 	}
 
-	// Create move-req-stream
-	_, err = js.AddStream(&nats.StreamConfig{
-		Name:     "move-req-stream",
-		Subjects: []string{"move-req"},
-	})
+	err = ensureStream(js, moveReqStreamName, moveReqStreamSubjects)
 	if err != nil {
-		log.Printf("Failed to create stream: %v", err)
-	} else {
-		log.Println("move-req-stream found or created")
+		log.Fatalf("Failed to create or update %s: %v", moveReqStreamName, err)
 	}
+	log.Println("move-req-stream found or created")
 
-	// Create move-res-stream
-	_, err = js.AddStream(&nats.StreamConfig{
-		Name:     "move-res-stream",
-		Subjects: []string{"move-res.*"},
-	})
+	err = ensureStream(js, moveResStreamName, []string{"move-res.*"})
 	if err != nil {
-		log.Printf("Failed to create stream: %v", err)
-	} else {
-		log.Println("move-res-stream found or created")
+		log.Fatalf("Failed to create or update %s: %v", moveResStreamName, err)
 	}
+	log.Println("move-res-stream found or created")
 
 	moveStream = js
+}
+
+func ensureStream(js nats.JetStreamContext, name string, subjects []string) error {
+	streamConfig := &nats.StreamConfig{
+		Name:     name,
+		Subjects: subjects,
+	}
+
+	streamInfo, err := js.StreamInfo(name)
+	if err == nats.ErrStreamNotFound {
+		_, err = js.AddStream(streamConfig)
+		return err
+	}
+	if err != nil {
+		return err
+	}
+
+	streamConfig = &streamInfo.Config
+	streamConfig.Subjects = subjects
+	_, err = js.UpdateStream(streamConfig)
+	return err
+}
+
+func RequestSubject(moveReq models.MoveReq) string {
+	if moveReq.WorkerTag == "" {
+		return moveReqSubject
+	}
+	return fmt.Sprintf("%s.%s", moveReqSubject, moveReq.WorkerTag)
 }
 
 // GetMove works with NATS in a request and response fashion, it sends a
@@ -90,8 +114,14 @@ func GetMove(moveReq models.MoveReq) (models.MoveData, error) {
 	}
 	defer sub.Unsubscribe()
 
-	// Publish it to move-req-stream
-	_, err = moveStream.Publish("move-req", data)
+	reqSubject := RequestSubject(moveReq)
+	log.WithFields(logrus.Fields{
+		"gameId":    moveReq.GameId,
+		"workerTag": moveReq.WorkerTag,
+		"subject":   reqSubject,
+	}).Info("publishing move request")
+
+	_, err = moveStream.Publish(reqSubject, data)
 	if err != nil {
 		// log.Error(err)
 		return moveRes, err
@@ -127,7 +157,14 @@ func PushMove(moveReq models.MoveReq) error {
 		return err
 	}
 
-	_, err = moveStream.Publish("move-req", data)
+	reqSubject := RequestSubject(moveReq)
+	log.WithFields(logrus.Fields{
+		"gameId":    moveReq.GameId,
+		"workerTag": moveReq.WorkerTag,
+		"subject":   reqSubject,
+	}).Info("pushing move request")
+
+	_, err = moveStream.Publish(reqSubject, data)
 	return err
 }
 

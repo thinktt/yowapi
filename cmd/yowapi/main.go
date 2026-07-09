@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -432,6 +433,11 @@ func main() {
 		err := checkHasValidCMP(game)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		if gameHasWorkerTag(game) && !hasRole(c, "admin") {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "workerTag requires admin role"})
 			return
 		}
 
@@ -863,18 +869,19 @@ func Auth() gin.HandlerFunc {
 
 func CheckRole(allowedRole string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		roles := c.GetStringSlice("roles")
-
-		for _, role := range roles {
-			if role == allowedRole {
-				c.Next()
-				return
-			}
+		if hasRole(c, allowedRole) {
+			c.Next()
+			return
 		}
 
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "incorrect role for this action"})
 		c.Abort()
 	}
+}
+
+func hasRole(c *gin.Context, allowedRole string) bool {
+	roles := c.GetStringSlice("roles")
+	return slices.Contains(roles, allowedRole)
 }
 
 func GetUser(c *gin.Context) (string, error) {
@@ -918,6 +925,13 @@ func checkHasValidCMP(game models.Game2) error {
 		return fmt.Errorf("at least one player must be type cmp")
 	}
 
+	if game.WhitePlayer.Type != "cmp" && game.WhitePlayer.WorkerTag != "" {
+		return fmt.Errorf("workerTag is only valid for cmp players")
+	}
+	if game.BlackPlayer.Type != "cmp" && game.BlackPlayer.WorkerTag != "" {
+		return fmt.Errorf("workerTag is only valid for cmp players")
+	}
+
 	ok := true
 	if game.WhitePlayer.Type == "cmp" {
 		_, ok = cmpMap[game.WhitePlayer.ID]
@@ -934,6 +948,10 @@ func checkHasValidCMP(game models.Game2) error {
 	}
 
 	return nil
+}
+
+func gameHasWorkerTag(game models.Game2) bool {
+	return game.WhitePlayer.WorkerTag != "" || game.BlackPlayer.WorkerTag != ""
 }
 
 func gameHasUser(game models.Game2, user string) bool {

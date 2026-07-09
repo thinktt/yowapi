@@ -84,10 +84,13 @@ func ensureStream(js nats.JetStreamContext, name string, subjects []string) erro
 	return err
 }
 
-func RequestSubject(moveReq models.MoveReq) string {
+func getMoveReqSubject(moveReq models.MoveReq) string {
+	// if there's no worker tag then the subject is just the base subject
 	if moveReq.WorkerTag == "" {
 		return moveReqSubject
 	}
+
+	// otherwise return the base subject with the sub subject appended
 	return fmt.Sprintf("%s.%s", moveReqSubject, moveReq.WorkerTag)
 }
 
@@ -114,12 +117,12 @@ func GetMove(moveReq models.MoveReq) (models.MoveData, error) {
 	}
 	defer sub.Unsubscribe()
 
-	reqSubject := RequestSubject(moveReq)
+	reqSubject := getMoveReqSubject(moveReq)
 	log.WithFields(logrus.Fields{
 		"gameId":    moveReq.GameId,
 		"workerTag": moveReq.WorkerTag,
 		"subject":   reqSubject,
-	}).Info("publishing move request")
+	}).Debug("publishing move request")
 
 	_, err = moveStream.Publish(reqSubject, data)
 	if err != nil {
@@ -157,12 +160,12 @@ func PushMove(moveReq models.MoveReq) error {
 		return err
 	}
 
-	reqSubject := RequestSubject(moveReq)
+	reqSubject := getMoveReqSubject(moveReq)
 	log.WithFields(logrus.Fields{
 		"gameId":    moveReq.GameId,
 		"workerTag": moveReq.WorkerTag,
 		"subject":   reqSubject,
-	}).Info("pushing move request")
+	}).Debug("pushing move request")
 
 	_, err = moveStream.Publish(reqSubject, data)
 	return err

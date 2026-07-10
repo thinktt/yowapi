@@ -81,9 +81,25 @@ func PlayEngineMove(game models.Game2) {
 	}
 
 	err = AddMove(game.ID, cmpName, moveData)
+	if isInvalidEngineMove(err) && engineMove.AlgebraMove != "" && engineMove.CoordinateMove != "" {
+		// The engine's algebraic notation can omit a checkmate suffix. Use the
+		// coordinate move only when the notation cannot be applied to this game.
+		move, coordinateErr := getAlgebraMoveFromChessGame(chessGame, engineMove.CoordinateMove)
+		if coordinateErr != nil {
+			fmt.Println(coordinateErr.Error())
+			return
+		}
+
+		moveData.Move = normalizeEngineMove(move)
+		err = AddMove(game.ID, cmpName, moveData)
+	}
 	if err != nil {
 		fmt.Println("error Adding engine move: ", err.Error())
 	}
+}
+
+func isInvalidEngineMove(err error) bool {
+	return err != nil && strings.HasPrefix(err.Error(), "Ivalid move:")
 }
 
 func normalizeEngineMove(move string) string {

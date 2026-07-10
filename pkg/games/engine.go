@@ -88,6 +88,10 @@ func PlayEngineMove(game models.Game2) {
 
 func normalizeEngineMove(move string) string {
 
+	// engine edge case sometimes misreporting checkmate as check tripping up
+	// chess lib, remove check and mate symbols and let the library decide
+	move = strings.TrimRight(move, "+#")
+
 	// fix weird casling notation
 	if strings.Contains(move, "0-0-0") {
 		return "O-O-O"
@@ -95,7 +99,7 @@ func normalizeEngineMove(move string) string {
 		return "O-O"
 	}
 
-	// add = sign to promition moves
+	// add equal sign to promition moves
 	for i := 1; i < len(move); i++ {
 		if strings.ContainsRune("QNRB", rune(move[i])) {
 			return move[:i] + "=" + move[i:]

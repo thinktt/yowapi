@@ -81,28 +81,16 @@ func PlayEngineMove(game models.Game2) {
 	}
 
 	err = AddMove(game.ID, cmpName, moveData)
-	if isInvalidEngineMove(err) && engineMove.AlgebraMove != "" && engineMove.CoordinateMove != "" {
-		// The engine's algebraic notation can omit a checkmate suffix. Use the
-		// coordinate move only when the notation cannot be applied to this game.
-		move, coordinateErr := getAlgebraMoveFromChessGame(chessGame, engineMove.CoordinateMove)
-		if coordinateErr != nil {
-			fmt.Println(coordinateErr.Error())
-			return
-		}
-
-		moveData.Move = normalizeEngineMove(move)
-		err = AddMove(game.ID, cmpName, moveData)
-	}
 	if err != nil {
 		fmt.Println("error Adding engine move: ", err.Error())
 	}
 }
 
-func isInvalidEngineMove(err error) bool {
-	return err != nil && strings.HasPrefix(err.Error(), "Ivalid move:")
-}
-
 func normalizeEngineMove(move string) string {
+
+	// engine edge case sometimes misreporting checkmate as check tripping up
+	// chess lib, remove check and mate symbols and let the library decide
+	move = strings.TrimRight(move, "+#")
 
 	// fix weird casling notation
 	if strings.Contains(move, "0-0-0") {
@@ -111,7 +99,7 @@ func normalizeEngineMove(move string) string {
 		return "O-O"
 	}
 
-	// add = sign to promition moves
+	// add equal sign to promition moves
 	for i := 1; i < len(move); i++ {
 		if strings.ContainsRune("QNRB", rune(move[i])) {
 			return move[:i] + "=" + move[i:]

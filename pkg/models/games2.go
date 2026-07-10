@@ -3,8 +3,9 @@ package models
 import "fmt"
 
 type Player struct {
-	ID   string `json:"id" binding:"required"` //needs lichess id validation
-	Type string `json:"type" binding:"required,oneof=cmp lichess lichessBot"`
+	ID        string `json:"id" binding:"required"` //needs lichess id validation
+	Type      string `json:"type" binding:"required,oneof=cmp lichess lichessBot"`
+	WorkerTag string `json:"workerTag,omitempty" bson:"workerTag,omitempty" binding:"omitempty,alphanum,max=32"`
 }
 type Game2New struct {
 	LichessID   string `json:"lichessId" bson:"lichessId" binding:"omitempty,alphanum,min=8,max=8"`

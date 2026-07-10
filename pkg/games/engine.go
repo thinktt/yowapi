@@ -17,11 +17,14 @@ func PlayEngineMove(game models.Game2) {
 
 	// look for any cmp playing this game
 	var cmpName string
+	var workerTag string
 	if game.TurnColor() == "white" && game.WhitePlayer.Type == "cmp" {
 		cmpName = game.WhitePlayer.ID
+		workerTag = game.WhitePlayer.WorkerTag
 	}
 	if game.TurnColor() == "black" && game.BlackPlayer.Type == "cmp" {
 		cmpName = game.BlackPlayer.ID
+		workerTag = game.BlackPlayer.WorkerTag
 	}
 
 	// no cmp found for this turn, nothing needs to be done
@@ -41,9 +44,10 @@ func PlayEngineMove(game models.Game2) {
 	}
 
 	moveReq := models.MoveReq{
-		Moves:   uciMoves,
-		CmpName: cmpName,
-		GameId:  game.ID,
+		Moves:     uciMoves,
+		CmpName:   cmpName,
+		GameId:    game.ID,
+		WorkerTag: workerTag,
 	}
 
 	// get the next move from the engine workers

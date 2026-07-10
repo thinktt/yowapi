@@ -35,6 +35,7 @@ type MoveReq struct {
 	Moves          []string `json:"moves" binding:"required,dive,alphanum,min=4,max=5"`
 	CmpName        string   `json:"cmpName" binding:"required,alphanum,max=15"`
 	GameId         string   `json:"gameId" binding:"required,alphanum,max=15"`
+	WorkerTag      string   `json:"workerTag,omitempty" binding:"omitempty,alphanum,max=32"`
 	StopId         int      `json:"stopId" binding:"omitempty,alphanum,max=15"`
 	ClockTime      int      `json:"clockTime" binding:"omitempty,alphanum,max=15"`
 	RandomIsOff    bool     `json:"randomIsOff"`
@@ -111,6 +112,7 @@ type MoveData struct {
 	Id             int     `json:"id,omitempty"`
 	AlgebraMove    string  `json:"algebraMove,omitempty"`
 	CoordinateMove string  `json:"coordinateMove,omitempty"`
+	WorkerTag      string  `json:"workerTag,omitempty"`
 	WillAcceptDraw bool    `json:"willAcceptDraw"`
 	Err            *string `json:"err,omitempty"`
 	Type           string  `json:"type"`

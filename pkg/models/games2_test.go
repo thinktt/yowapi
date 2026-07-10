@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"testing"
 )
 
@@ -19,13 +20,8 @@ func TestIsUsersTurn(t *testing.T) {
 	gameBlackTurn := &Game2{
 		WhitePlayer: Player{ID: whitePlayerID},
 		BlackPlayer: Player{ID: blackPlayerID},
+		MoveList:    []string{"e4"},
 	}
-
-	// Mock TurnColor function to return "white" for white's turn
-	gameWhiteTurn.TurnColor = (g *Game2) func() string { return "white" }
-
-	// Mock TurnColor function to return "black" for black's turn
-	// gameBlackTurn.TurnColor = (g *Game2) func() string { return "black" }
 
 	tests := []struct {
 		game     *Game2
@@ -46,5 +42,25 @@ func TestIsUsersTurn(t *testing.T) {
 				t.Errorf("got %v, want %v", result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestPlayerWorkerTagJSON(t *testing.T) {
+	untaggedPlayer := Player{ID: "Wizard", Type: "cmp"}
+	untaggedJSON, err := json.Marshal(untaggedPlayer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(untaggedJSON) != `{"id":"Wizard","type":"cmp"}` {
+		t.Fatalf("got %s", untaggedJSON)
+	}
+
+	taggedPlayer := Player{ID: "Wizard", Type: "cmp", WorkerTag: "kingNT"}
+	taggedJSON, err := json.Marshal(taggedPlayer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(taggedJSON) != `{"id":"Wizard","type":"cmp","workerTag":"kingNT"}` {
+		t.Fatalf("got %s", taggedJSON)
 	}
 }

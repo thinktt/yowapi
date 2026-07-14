@@ -29,7 +29,7 @@ type Game2 struct {
 	Method        string   `json:"method,omitempty" bson:"method,omitempty" binding:"omitempty,oneof=mate resign material mutual stalemate threefold fiftyMove time"`
 	Moves         string   `json:"moves" bson:"moves,omitempty" binding:"required"`
 	MoveList      []string `json:"moveList,omitempty" bson:"moveList"`
-	Tags          []string `json:"tags,omitempty" bson:"tags,omitempty"`
+	Tags          []string `json:"tags,omitempty" binding:"omitempty,dive,alphanum,max=32"`
 	WhitePlayer   Player   `json:"whitePlayer" bson:"whitePlayer" binding:"required"`
 	BlackPlayer   Player   `json:"blackPlayer" bson:"blackPlayer" binding:"required"`
 	WhiteWillDraw bool     `json:"whiteWillDraw,omitempty" bson:"whiteWillDraw"`

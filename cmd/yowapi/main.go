@@ -478,45 +478,6 @@ func main() {
 		games.PublishGameUpdates(game.ID)
 	})
 
-	r.POST("/games2/from-position", CheckRole("admin"), func(c *gin.Context) {
-		var newGame models.Game2FromPosition
-
-		if err := c.ShouldBindJSON(&newGame); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		game, err := newGameFromPosition(newGame)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		if err := checkHasValidCMP(game); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		if err := checkHasValidWorkerTag(game); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		result, err := db.CreateGame2(game)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"message": "DB Error: " + err.Error()})
-			return
-		}
-
-		if result.MatchedCount > 0 {
-			c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("game %s already exist, no new creation", game.ID)})
-			return
-		}
-
-		c.JSON(http.StatusOK, game)
-		games.PublishGameUpdates(game.ID)
-	})
-
 	r.POST("/games2/:id/moves", func(c *gin.Context) {
 		id := c.Param("id")
 
@@ -672,6 +633,45 @@ func main() {
 	// ..... Admin routes start here......
 	//.....................................
 
+	r.POST("/games2/from-position", CheckRole("admin"), func(c *gin.Context) {
+		var newGame models.Game2FromPosition
+
+		if err := c.ShouldBindJSON(&newGame); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		game, err := buildGameFromPosition(newGame)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		if err := checkHasValidCMP(game); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		if err := checkHasValidWorkerTag(game); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		result, err := db.CreateGame2(game)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "DB Error: " + err.Error()})
+			return
+		}
+
+		if result.MatchedCount > 0 {
+			c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("game %s already exist, no new creation", game.ID)})
+			return
+		}
+
+		c.JSON(http.StatusOK, game)
+		games.PublishGameUpdates(game.ID)
+	})
+
 	r.POST("/games2/:id/lichessID", CheckRole("admin"), func(c *gin.Context) {
 		id := c.Param("id")
 
@@ -753,16 +753,14 @@ func main() {
 			return
 		}
 
-		moves := strings.Fields(game.Moves)
+		game.MoveList = strings.Fields(game.Moves)
+		game.Moves = ""
 
 		_, err := games.ParseGame(game)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-
-		game.MoveList = moves
-		game.Moves = ""
 
 		result, err := db.CreateGame2(game)
 		if err != nil {
@@ -1004,7 +1002,7 @@ func gameHasWorkerTag(game models.Game2) bool {
 	return game.WhitePlayer.WorkerTag != "" || game.BlackPlayer.WorkerTag != ""
 }
 
-func newGameFromPosition(newGame models.Game2FromPosition) (models.Game2, error) {
+func buildGameFromPosition(newGame models.Game2FromPosition) (models.Game2, error) {
 	moveList := strings.Fields(newGame.Moves)
 	if len(moveList) == 0 {
 		return models.Game2{}, fmt.Errorf("starting position requires at least one move")

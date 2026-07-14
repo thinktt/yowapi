@@ -8,16 +8,16 @@ import (
 	"github.com/thinktt/yowapi/pkg/models"
 )
 
-func TestNewGameFromPosition(t *testing.T) {
+func TestBuildGameFromPosition(t *testing.T) {
 	input := models.Game2FromPosition{
 		WhitePlayer: models.Player{ID: "Orin", Type: "cmp", WorkerTag: "kingNT"},
 		BlackPlayer: models.Player{ID: "Orin", Type: "cmp"},
 		Moves:       "e4 c5 Nf3",
 	}
 
-	game, err := newGameFromPosition(input)
+	game, err := buildGameFromPosition(input)
 	if err != nil {
-		t.Fatalf("newGameFromPosition() error = %v", err)
+		t.Fatalf("buildGameFromPosition() error = %v", err)
 	}
 
 	if game.Moves != "" {
@@ -34,35 +34,35 @@ func TestNewGameFromPosition(t *testing.T) {
 	}
 }
 
-func TestNewGameFromPositionRejectsInvalidMoves(t *testing.T) {
-	_, err := newGameFromPosition(models.Game2FromPosition{
+func TestBuildGameFromPositionRejectsInvalidMoves(t *testing.T) {
+	_, err := buildGameFromPosition(models.Game2FromPosition{
 		WhitePlayer: models.Player{ID: "Orin", Type: "cmp"},
 		BlackPlayer: models.Player{ID: "Orin", Type: "cmp"},
 		Moves:       "e4 e5 e5",
 	})
 	if err == nil {
-		t.Fatal("newGameFromPosition() accepted an invalid move sequence")
+		t.Fatal("buildGameFromPosition() accepted an invalid move sequence")
 	}
 }
 
-func TestNewGameFromPositionRejectsEmptyMoves(t *testing.T) {
-	_, err := newGameFromPosition(models.Game2FromPosition{
+func TestBuildGameFromPositionRejectsEmptyMoves(t *testing.T) {
+	_, err := buildGameFromPosition(models.Game2FromPosition{
 		WhitePlayer: models.Player{ID: "Orin", Type: "cmp"},
 		BlackPlayer: models.Player{ID: "Orin", Type: "cmp"},
 		Moves:       "   ",
 	})
 	if err == nil {
-		t.Fatal("newGameFromPosition() accepted an empty move sequence")
+		t.Fatal("buildGameFromPosition() accepted an empty move sequence")
 	}
 }
 
-func TestNewGameFromPositionRejectsFinishedGame(t *testing.T) {
-	_, err := newGameFromPosition(models.Game2FromPosition{
+func TestBuildGameFromPositionRejectsFinishedGame(t *testing.T) {
+	_, err := buildGameFromPosition(models.Game2FromPosition{
 		WhitePlayer: models.Player{ID: "Orin", Type: "cmp"},
 		BlackPlayer: models.Player{ID: "Orin", Type: "cmp"},
 		Moves:       "f3 e5 g4 Qh4#",
 	})
 	if err == nil {
-		t.Fatal("newGameFromPosition() accepted a finished game")
+		t.Fatal("buildGameFromPosition() accepted a finished game")
 	}
 }

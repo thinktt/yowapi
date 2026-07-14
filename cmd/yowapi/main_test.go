@@ -13,6 +13,7 @@ func TestBuildGameFromPosition(t *testing.T) {
 		WhitePlayer: models.Player{ID: "Orin", Type: "cmp", WorkerTag: "kingNT"},
 		BlackPlayer: models.Player{ID: "Orin", Type: "cmp"},
 		Moves:       "e4 c5 Nf3",
+		Tags:        []string{"test3", "openingSuite1"},
 	}
 
 	game, err := buildGameFromPosition(input)
@@ -25,6 +26,9 @@ func TestBuildGameFromPosition(t *testing.T) {
 	}
 	if want := strings.Fields(input.Moves); !reflect.DeepEqual(game.MoveList, want) {
 		t.Errorf("MoveList = %v, want %v", game.MoveList, want)
+	}
+	if !reflect.DeepEqual(game.Tags, input.Tags) {
+		t.Errorf("Tags = %v, want %v", game.Tags, input.Tags)
 	}
 	if game.TurnColor() != "black" {
 		t.Errorf("TurnColor() = %q, want black", game.TurnColor())

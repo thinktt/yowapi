@@ -41,13 +41,26 @@ func init() {
 
 	yowDatabase = client.Database("yow")
 
-	// make sure games2 collection has unique index for its ids
+	// get the gams2 collection
 	gamesCollection := yowDatabase.Collection("games2")
-	indexModel := mongo.IndexModel{
+
+	// define unique indexes for game ids
+	idIndex := mongo.IndexModel{
 		Keys:    bson.M{"id": 1}, // Index on the `id` field
 		Options: options.Index().SetUnique(true),
 	}
-	_, err = gamesCollection.Indexes().CreateOne(context.Background(), indexModel)
+
+	// define indexes for game tags, because tags is an array
+	// MongoDb will create a multi key index
+	tagsIndex := mongo.IndexModel{
+		Keys: bson.M{"tags": 1},
+	}
+
+	// create indexes in db if they don't exists
+	_, err = gamesCollection.Indexes().CreateMany(
+		context.Background(),
+		[]mongo.IndexModel{idIndex, tagsIndex},
+	)
 	if err != nil {
 		panic(err)
 	}

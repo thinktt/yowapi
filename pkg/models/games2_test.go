@@ -2,7 +2,10 @@ package models
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
+
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 func TestIsUsersTurn(t *testing.T) {
@@ -62,5 +65,47 @@ func TestPlayerWorkerTagJSON(t *testing.T) {
 	}
 	if string(taggedJSON) != `{"id":"Wizard","type":"cmp","workerTag":"kingNT"}` {
 		t.Fatalf("got %s", taggedJSON)
+	}
+}
+
+func TestGame2TagsJSON(t *testing.T) {
+	untaggedGame := Game2{ID: "testgame", Tags: []string{}}
+	untaggedJSON, err := json.Marshal(untaggedGame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(untaggedJSON), `"tags"`) {
+		t.Fatalf("empty tags should be omitted: %s", untaggedJSON)
+	}
+	untaggedBSON, err := bson.Marshal(untaggedGame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var untaggedDocument bson.M
+	if err := bson.Unmarshal(untaggedBSON, &untaggedDocument); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := untaggedDocument["tags"]; ok {
+		t.Fatalf("empty tags should be omitted from BSON: %v", untaggedDocument)
+	}
+
+	taggedGame := Game2{ID: "testgame", Tags: []string{"test3", "halfCPU"}}
+	taggedJSON, err := json.Marshal(taggedGame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(taggedJSON), `"tags":["test3","halfCPU"]`) {
+		t.Fatalf("tags missing from JSON: %s", taggedJSON)
+	}
+	taggedBSON, err := bson.Marshal(taggedGame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var taggedDocument bson.M
+	if err := bson.Unmarshal(taggedBSON, &taggedDocument); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := taggedDocument["tags"]; !ok {
+		t.Fatalf("tags missing from BSON: %v", taggedDocument)
 	}
 }

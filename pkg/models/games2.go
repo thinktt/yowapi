@@ -13,6 +13,12 @@ type Game2New struct {
 	BlackPlayer Player `json:"blackPlayer" bson:"blackPlayer" binding:"required"`
 }
 
+type Game2FromPosition struct {
+	WhitePlayer Player `json:"whitePlayer" binding:"required"`
+	BlackPlayer Player `json:"blackPlayer" binding:"required"`
+	Moves       string `json:"moves" binding:"required"`
+}
+
 type Game2 struct {
 	ID            string   `json:"id" bson:"id" binding:"required,alphanum,min=8,max=9"`
 	LichessID     string   `json:"lichessId" bson:"lichessId"  binding:"alphanum,min=8,max=8"`

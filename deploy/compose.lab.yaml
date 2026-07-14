@@ -1,0 +1,20 @@
+services:
+  yowapi:
+    image: yowapi-lab:latest
+    container_name: yowapi
+    environment:
+      - MONGO_HOST=mongodb
+      - GIN_MODE=debug
+      - PORT=8443
+      - NATS_URL=nats://zen:4222
+    env_file:
+      - env/king.env
+    networks:
+      - mongonet
+    ports:
+      - 8444:8443
+    restart: unless-stopped
+
+networks:
+  mongonet:
+    external: true

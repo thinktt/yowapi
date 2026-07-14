@@ -5,6 +5,7 @@ dotenv:
 
 vars:
   API_IMAGE_LOCAL: "zen:5000/yowapi:latest"
+  API_IMAGE_LAB: "yowapi-lab:latest"
 
 tasks:
   default:
@@ -25,6 +26,12 @@ tasks:
     cmds:
       - docker image rm {{.API_IMAGE_LOCAL}} || true
       - docker build -t {{.API_IMAGE_LOCAL}} .
+
+  build:lab:image:
+    desc: Build the Bee lab API image
+    deps: [build:dist]
+    cmds:
+      - docker build -t {{.API_IMAGE_LAB}} .
 
   gobuild:
     desc: Build yowapi binary into dist/
@@ -78,6 +85,19 @@ tasks:
     dir: deploy
     cmds:
       - docker compose -f compose.yaml down
+
+  lab:up:
+    desc: Start the Bee lab API with local Mongo and Zen NATS
+    deps: [build:lab:image]
+    dir: deploy
+    cmds:
+      - docker compose --project-name yowapi -f compose.lab.yaml up -d
+
+  lab:down:
+    desc: Stop the Bee lab API
+    dir: deploy
+    cmds:
+      - docker compose --project-name yowapi -f compose.lab.yaml down
 
   jot:
     desc: Install jot CLI

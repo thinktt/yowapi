@@ -1019,6 +1019,7 @@ func buildGameFromPosition(newGame models.Game2FromPosition) (models.Game2, erro
 		Method:        "",
 		Moves:         "",
 		MoveList:      moveList,
+		Tags:          newGame.Tags,
 		WhiteWillDraw: false,
 		BlackWillDraw: false,
 		WhitePlayer:   newGame.WhitePlayer,

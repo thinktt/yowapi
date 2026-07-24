@@ -18,6 +18,7 @@ var nc *nats.Conn
 const moveReqStreamName = "move-req-stream"
 const moveResStreamName = "move-res-stream"
 const moveReqSubject = "move-req"
+const moveResponseTimeout = 15 * time.Minute
 
 var moveReqStreamSubjects = []string{moveReqSubject, moveReqSubject + ".*"}
 
@@ -131,7 +132,7 @@ func GetMove(moveReq models.MoveReq) (models.MoveData, error) {
 	}
 
 	// Wait for a single message
-	msg, err := sub.NextMsg(time.Second * 60) // Waits up to 10 seconds
+	msg, err := sub.NextMsg(moveResponseTimeout)
 	if err != nil {
 		log.Errorf("Error receiving message: %v", err)
 		return moveRes, err

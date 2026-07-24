@@ -236,6 +236,22 @@ func main() {
 		c.JSON(http.StatusOK, gameIDs)
 	})
 
+	r.GET("/games2/scoreboard", func(c *gin.Context) {
+		gameTag := c.Query("tag")
+		if gameTag == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "query required: ?tag=<gameTag>"})
+			return
+		}
+
+		scoreboard, err := db.GetScoreboard(gameTag)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, scoreboard)
+	})
+
 	r.GET("/ids/:user", func(c *gin.Context) {
 		user := c.Param("user")
 

@@ -634,6 +634,31 @@ func main() {
 	// ..... Admin routes start here......
 	//.....................................
 
+	r.POST("/games2/:id/kick", CheckRole("admin"), func(c *gin.Context) {
+		id := c.Param("id")
+		game, err := db.GetGame2(id)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "DB Error: " + err.Error()})
+			return
+		}
+		if game.ID == "" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "game not found"})
+			return
+		}
+		if game.Winner != "pending" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "game is finished"})
+			return
+		}
+
+		// Re-publish from the stored position so the normal CMP turn handler runs again.
+		if err := games.PublishGameUpdates(id); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "starting engine move: " + err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusAccepted, gin.H{"message": "engine move requested"})
+	})
+
 	r.POST("/games2/from-position", CheckRole("admin"), func(c *gin.Context) {
 		var newGame models.Game2FromPosition
 

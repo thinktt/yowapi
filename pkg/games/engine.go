@@ -36,11 +36,13 @@ func PlayEngineMove(game models.Game2) {
 	chessGame, err := ParseGame(game)
 	if err != nil {
 		fmt.Println("Error parsing game: ", err.Error())
+		return
 	}
 
 	uciMoves, err := getUCIMovesFromChessGame(chessGame)
 	if err != nil {
 		fmt.Println("Error parsing UCI moves: ", err.Error())
+		return
 	}
 
 	moveReq := models.MoveReq{

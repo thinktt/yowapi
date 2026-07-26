@@ -8,9 +8,10 @@ type Player struct {
 	WorkerTag string `json:"workerTag,omitempty" bson:"workerTag,omitempty" binding:"omitempty,alphanum,max=32"`
 }
 type Game2New struct {
-	LichessID   string `json:"lichessId" bson:"lichessId" binding:"omitempty,alphanum,min=8,max=8"`
-	WhitePlayer Player `json:"whitePlayer" bson:"whitePlayer" binding:"required"`
-	BlackPlayer Player `json:"blackPlayer" bson:"blackPlayer" binding:"required"`
+	LichessID   string   `json:"lichessId" bson:"lichessId" binding:"omitempty,alphanum,min=8,max=8"`
+	WhitePlayer Player   `json:"whitePlayer" bson:"whitePlayer" binding:"required"`
+	BlackPlayer Player   `json:"blackPlayer" bson:"blackPlayer" binding:"required"`
+	Tags        []string `json:"tags,omitempty" binding:"omitempty,dive,alphanum,max=32"`
 }
 
 type Game2FromPosition struct {

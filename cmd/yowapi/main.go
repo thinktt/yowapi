@@ -424,7 +424,7 @@ func main() {
 			Method:        "",
 			Moves:         "",
 			MoveList:      []string{},
-			Tags:          []string{},
+			Tags:          newGame.Tags,
 			WhiteWillDraw: false,
 			BlackWillDraw: false,
 			WhitePlayer:   newGame.WhitePlayer,

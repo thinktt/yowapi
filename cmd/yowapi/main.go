@@ -28,6 +28,10 @@ var cmpMap = make(map[string]models.Cmp)
 func main() {
 
 	loadCmps()
+	if err := moveque.StartMoveResponseConsumers(games.ApplyEngineMoveResponse); err != nil {
+		fmt.Println("Unable to start move response consumers:", err)
+		os.Exit(1)
+	}
 	// fmt.Println(cmpMap["Ash"])
 
 	config := cors.DefaultConfig()
@@ -859,7 +863,7 @@ func main() {
 			return
 		}
 
-		moveData, err := moveque.GetMove(moveReq)
+		moveData, err := moveque.GetDiagnosticMove(moveReq)
 		if err != nil {
 			fmt.Println("There was ane error getting the move: ", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"messagge": "queue error"})

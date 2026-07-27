@@ -65,6 +65,7 @@ func GetGameUpdate(game models.Game2) models.Game2MutableFields {
 // var uciRegex = regexp.MustCompile(`[a-h][1-8][a-h][1-8][qrbn]?`)
 
 func getAlgebraMoveFromChessGame(chessGame *chess.Game, newUciMove string) (string, error) {
+	chess.UseNotation(chess.UCINotation{})(chessGame)
 	err := chessGame.MoveStr(newUciMove)
 	if err != nil {
 		err := fmt.Errorf("error adding coordinate move to chessGame: %s", err.Error())

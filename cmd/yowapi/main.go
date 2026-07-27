@@ -28,11 +28,12 @@ var cmpMap = make(map[string]models.Cmp)
 func main() {
 
 	loadCmps()
-	if err := moveque.StartMoveResponseConsumers(games.ApplyEngineMoveResponse); err != nil {
-		fmt.Println("Unable to start move response consumers:", err)
+
+	err := moveque.StartMoveResponseConsumers(games.ApplyEngineMoveResponse)
+	if err != nil {
+		fmt.Println("Unable to start NATS move response consumers:", err)
 		os.Exit(1)
 	}
-	// fmt.Println(cmpMap["Ash"])
 
 	config := cors.DefaultConfig()
 	config.AllowAllOrigins = true
@@ -638,6 +639,10 @@ func main() {
 	// ..... Admin routes start here......
 	//.....................................
 
+	// games2/:id/kick can be used to restart a stalled game
+	// ues this route with caution as if a engine worker is stalled waiting
+	// waitin on a move this can stall more workers, using this should
+	// largely not be need now as with newer engine and NATS timeout handling
 	r.POST("/games2/:id/kick", CheckRole("admin"), func(c *gin.Context) {
 		id := c.Param("id")
 		game, err := db.GetGame2(id)
@@ -663,6 +668,8 @@ func main() {
 		c.JSON(http.StatusAccepted, gin.H{"message": "engine move requested"})
 	})
 
+	// games2/from-poistion allows starting a game from a particular position
+	// currently used for developmer testing could eventually become a user route
 	r.POST("/games2/from-position", CheckRole("admin"), func(c *gin.Context) {
 		var newGame models.Game2FromPosition
 

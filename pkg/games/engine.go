@@ -83,6 +83,13 @@ func ApplyEngineMoveResponse(engineMove models.MoveData) error {
 		log.WithField("engineError", *engineMove.Err).Error("worker returned a move error")
 		return nil
 	}
+	if engineMove.Warning != nil {
+		log.WithFields(logrus.Fields{
+			"engineWarning":  *engineMove.Warning,
+			"algebraMove":    engineMove.AlgebraMove,
+			"coordinateMove": engineMove.CoordinateMove,
+		}).Warn("worker returned a move warning")
+	}
 
 	// Load the current game and discard responses for obsolete game states.
 	game, err := db.GetGame2(engineMove.GameId)

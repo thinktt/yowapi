@@ -115,6 +115,7 @@ type MoveData struct {
 	CoordinateMove string  `json:"coordinateMove,omitempty"`
 	WorkerTag      string  `json:"workerTag,omitempty"`
 	WillAcceptDraw bool    `json:"willAcceptDraw"`
+	Warning        *string `json:"warning,omitempty"`
 	Err            *string `json:"err,omitempty"`
 	Type           string  `json:"type"`
 	GameId         string  `json:"gameId,omitempty"`

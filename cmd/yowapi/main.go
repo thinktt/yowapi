@@ -442,6 +442,33 @@ func main() {
 			return
 		}
 
+		// if the game has moves then parse and validate the moves
+		if newGame.Moves != "" {
+			// only admins can crete games from starting positions for now
+			if !hasRole(c, "admin") {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "starting moves require admin role"})
+				return
+			}
+
+			game.MoveList = strings.Fields(newGame.Moves)
+			if len(game.MoveList) == 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "starting position requires at least one move"})
+				return
+			}
+
+			chessGame, err := games.ParseGame(game)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+
+			winner, _ := games.GetGameStatus(chessGame)
+			if winner != "pending" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "starting position is already a finished game"})
+				return
+			}
+		}
+
 		// this should be abstracted out to security layer at some point
 		if gameHasWorkerTag(game) && !hasRole(c, "admin") {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "workerTag requires admin role"})
@@ -483,6 +510,8 @@ func main() {
 
 		games.PublishGameUpdates(game.ID)
 	})
+
+	//***********************
 
 	r.POST("/games2/:id/moves", func(c *gin.Context) {
 		id := c.Param("id")
@@ -666,47 +695,6 @@ func main() {
 		}
 
 		c.JSON(http.StatusAccepted, gin.H{"message": "engine move requested"})
-	})
-
-	// games2/from-poistion allows starting a game from a particular position
-	// currently used for developmer testing could eventually become a user route
-	r.POST("/games2/from-position", CheckRole("admin"), func(c *gin.Context) {
-		var newGame models.Game2FromPosition
-
-		if err := c.ShouldBindJSON(&newGame); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		game, err := buildGameFromPosition(newGame)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		if err := checkHasValidCMP(game); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		if err := checkHasValidWorkerTag(game); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		result, err := db.CreateGame2(game)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"message": "DB Error: " + err.Error()})
-			return
-		}
-
-		if result.MatchedCount > 0 {
-			c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("game %s already exist, no new creation", game.ID)})
-			return
-		}
-
-		c.JSON(http.StatusOK, game)
-		games.PublishGameUpdates(game.ID)
 	})
 
 	r.POST("/games2/:id/lichessID", CheckRole("admin"), func(c *gin.Context) {
@@ -1037,43 +1025,6 @@ func checkHasValidWorkerTag(game models.Game2) error {
 
 func gameHasWorkerTag(game models.Game2) bool {
 	return game.WhitePlayer.WorkerTag != "" || game.BlackPlayer.WorkerTag != ""
-}
-
-func buildGameFromPosition(newGame models.Game2FromPosition) (models.Game2, error) {
-	moveList := strings.Fields(newGame.Moves)
-	if len(moveList) == 0 {
-		return models.Game2{}, fmt.Errorf("starting position requires at least one move")
-	}
-
-	now := time.Now().UnixMilli()
-	id, _ := games.GetGameID()
-	game := models.Game2{
-		ID:            id,
-		LichessID:     "",
-		CreatedAt:     now,
-		LastMoveAt:    now,
-		Winner:        "pending",
-		Method:        "",
-		Moves:         "",
-		MoveList:      moveList,
-		Tags:          newGame.Tags,
-		WhiteWillDraw: false,
-		BlackWillDraw: false,
-		WhitePlayer:   newGame.WhitePlayer,
-		BlackPlayer:   newGame.BlackPlayer,
-	}
-
-	chessGame, err := games.ParseGame(game)
-	if err != nil {
-		return models.Game2{}, err
-	}
-
-	winner, _ := games.GetGameStatus(chessGame)
-	if winner != "pending" {
-		return models.Game2{}, fmt.Errorf("starting position is already a finished game")
-	}
-
-	return game, nil
 }
 
 func gameHasUser(game models.Game2, user string) bool {

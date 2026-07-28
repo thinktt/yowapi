@@ -442,31 +442,16 @@ func main() {
 			return
 		}
 
-		// if the game has moves then parse and validate the moves
-		if newGame.Moves != "" {
-			// only admins can crete games from starting positions for now
-			if !hasRole(c, "admin") {
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "starting moves require admin role"})
-				return
-			}
+		// only admins can create games from starting positions for now
+		if newGame.Moves != "" && !hasRole(c, "admin") {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "starting moves require admin role"})
+			return
+		}
 
-			game.MoveList = strings.Fields(newGame.Moves)
-			if len(game.MoveList) == 0 {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "starting position requires at least one move"})
-				return
-			}
-
-			chessGame, err := games.ParseGame(game)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-
-			winner, _ := games.GetGameStatus(chessGame)
-			if winner != "pending" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "starting position is already a finished game"})
-				return
-			}
+		game.MoveList, err = checkStartMoves(newGame)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
 		}
 
 		// this should be abstracted out to security layer at some point
@@ -510,8 +495,6 @@ func main() {
 
 		games.PublishGameUpdates(game.ID)
 	})
-
-	//***********************
 
 	r.POST("/games2/:id/moves", func(c *gin.Context) {
 		id := c.Param("id")
@@ -669,8 +652,8 @@ func main() {
 	//.....................................
 
 	// games2/:id/kick can be used to restart a stalled game
-	// ues this route with caution as if a engine worker is stalled waiting
-	// waitin on a move this can stall more workers, using this should
+	// ues this route with caution, if a engine worker is stalled waiting
+	// on a move this can stall more workers, using this should
 	// largely not be need now as with newer engine and NATS timeout handling
 	r.POST("/games2/:id/kick", CheckRole("admin"), func(c *gin.Context) {
 		id := c.Param("id")
@@ -1025,6 +1008,34 @@ func checkHasValidWorkerTag(game models.Game2) error {
 
 func gameHasWorkerTag(game models.Game2) bool {
 	return game.WhitePlayer.WorkerTag != "" || game.BlackPlayer.WorkerTag != ""
+}
+
+func checkStartMoves(newGame models.Game2New) ([]string, error) {
+	if newGame.Moves == "" {
+		return []string{}, nil
+	}
+
+	moveList := strings.Fields(newGame.Moves)
+	if len(moveList) == 0 {
+		return nil, fmt.Errorf("starting position requires at least one move")
+	}
+
+	game := models.Game2{
+		MoveList:    moveList,
+		WhitePlayer: newGame.WhitePlayer,
+		BlackPlayer: newGame.BlackPlayer,
+	}
+	chessGame, err := games.ParseGame(game)
+	if err != nil {
+		return nil, err
+	}
+
+	winner, _ := games.GetGameStatus(chessGame)
+	if winner != "pending" {
+		return nil, fmt.Errorf("starting position is already a finished game")
+	}
+
+	return moveList, nil
 }
 
 func gameHasUser(game models.Game2, user string) bool {

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/sirupsen/logrus"
 	"github.com/thinktt/yowapi/pkg/models"
 	"github.com/thinktt/yowapi/pkg/utils"
 )
@@ -35,6 +36,87 @@ func TestGetAlgebraMoveFromFreshGameAcceptsCoordinateBookMove(t *testing.T) {
 	}
 	if move != "e4" {
 		t.Fatalf("getAlgebraMoveFromChessGame() = %q, want %q", move, "e4")
+	}
+}
+
+func TestGetMoveFromEngineResponsePrefersCoordinateMove(t *testing.T) {
+	response := models.MoveData{
+		GameId:         "test-game",
+		Index:          3,
+		WorkerTag:      "kingWC",
+		CoordinateMove: "e2e4",
+		AlgebraMove:    "d4",
+	}
+
+	move, err := getMoveFromEngineResponse(response, logrus.NewEntry(logrus.New()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if move != "e2e4" {
+		t.Fatalf("engine move = %q, want %q", move, "e2e4")
+	}
+}
+
+func TestGetMoveFromEngineResponseDoesNotChangeCoordinatePromotion(t *testing.T) {
+	response := models.MoveData{
+		GameId:         "test-game",
+		CoordinateMove: "e7e8Q",
+	}
+
+	move, err := getMoveFromEngineResponse(response, logrus.NewEntry(logrus.New()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if move != "e7e8Q" {
+		t.Fatalf("engine move = %q, want %q", move, "e7e8Q")
+	}
+}
+
+func TestGetMoveFromEngineResponseSupportsLegacyAlgebraMove(t *testing.T) {
+	response := models.MoveData{
+		GameId:      "test-game",
+		Index:       3,
+		WorkerTag:   "kingWC",
+		AlgebraMove: "0-0+",
+	}
+
+	move, err := getMoveFromEngineResponse(response, logrus.NewEntry(logrus.New()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if move != "O-O" {
+		t.Fatalf("engine move = %q, want %q", move, "O-O")
+	}
+}
+
+func TestGetMoveFromEngineResponseRejectsMissingMove(t *testing.T) {
+	response := models.MoveData{GameId: "test-game"}
+
+	_, err := getMoveFromEngineResponse(response, logrus.NewEntry(logrus.New()))
+	if err == nil {
+		t.Fatal("expected missing move error")
+	}
+}
+
+func TestIsCoordinateMove(t *testing.T) {
+	tests := []struct {
+		move string
+		want bool
+	}{
+		{move: "e2e4", want: true},
+		{move: "e7e8q", want: true},
+		{move: "O-O", want: false},
+		{move: "e8=Q", want: false},
+		{move: "d8b6", want: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.move, func(t *testing.T) {
+			got := isCoordinateMove(test.move)
+			if got != test.want {
+				t.Fatalf("isCoordinateMove(%q) = %t, want %t", test.move, got, test.want)
+			}
+		})
 	}
 }
 

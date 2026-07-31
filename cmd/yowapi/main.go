@@ -365,9 +365,9 @@ func main() {
 			case <-clientClosed:
 				fmt.Println("client dropped SSE")
 				return
-			case gameData := <-gameStream.Channel:
-				c.Writer.Write([]byte("event: gameUpdate\n"))
-				c.Writer.Write([]byte("data: " + gameData + "\n\n"))
+			case message := <-gameStream.Channel:
+				c.Writer.Write([]byte("event: " + message.Event + "\n"))
+				c.Writer.Write([]byte("data: " + message.Data + "\n\n"))
 				c.Writer.Flush()
 			}
 		}

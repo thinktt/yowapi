@@ -10,25 +10,24 @@ import (
 
 // OfferDraw NEED TO CHECK THIS. Things could go wrong if cmp is playing both sides
 func OfferDraw(id, userID, color string) error {
-	// get the current game from the DB
+	unlock := lockGame(id)
+	defer unlock()
+
 	game, err := db.GetGame2(id)
 	if err != nil {
-		err = utils.NewHTTPError(
+		return utils.NewHTTPError(
 			http.StatusInternalServerError, "DB Error: "+err.Error())
-		return err
 	}
 	if game.ID == "" {
-		err = utils.NewHTTPError(
+		return utils.NewHTTPError(
 			http.StatusNotFound,
 			fmt.Sprintf("no game found for id %s", id))
-		return err
 	}
 
 	//check that game is still live
 	if game.Winner != "pending" {
-		err = utils.NewHTTPError(
+		return utils.NewHTTPError(
 			http.StatusBadRequest, "no moves allowed, game is finished")
-		return err
 	}
 
 	// check if user is playing this game

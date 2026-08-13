@@ -20,9 +20,10 @@ var nc *nats.Conn
 const moveReqStreamName = "move-req-stream"
 const moveResStreamName = "move-res-stream"
 const moveReqSubject = "move-req"
+const defaultWorkerTag = "default"
 const diagnosticMoveTimeout = 15 * time.Minute
 
-var moveReqStreamSubjects = []string{moveReqSubject, moveReqSubject + ".*"}
+var moveReqStreamSubjects = []string{moveReqSubject + ".*"}
 var consumerNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 func init() {
@@ -89,28 +90,27 @@ func ensureStream(js nats.JetStreamContext, name string, subjects []string) erro
 }
 
 func getMoveReqSubject(moveReq models.MoveReq) string {
-	// if there's no worker tag then the subject is just the base subject
-	if moveReq.WorkerTag == "" {
-		return moveReqSubject
-	}
-
-	// otherwise return the base subject with the sub subject appended
 	return fmt.Sprintf("%s.%s", moveReqSubject, moveReq.WorkerTag)
+}
+
+func withDefaultWorkerTag(moveReq models.MoveReq) models.MoveReq {
+	if moveReq.WorkerTag == "" {
+		moveReq.WorkerTag = defaultWorkerTag
+	}
+	return moveReq
 }
 
 // GetDiagnosticMove preserves the admin move-request diagnostic. Normal game
 // traffic uses PushMove and the durable response consumer instead.
 func GetDiagnosticMove(moveReq models.MoveReq) (models.MoveData, error) {
 	moveRes := models.MoveData{}
+	moveReq = withDefaultWorkerTag(moveReq)
 	data, err := json.Marshal(moveReq)
 	if err != nil {
 		return moveRes, err
 	}
 
-	subject := fmt.Sprintf("move-res.%s", moveReq.GameId)
-	if moveReq.WorkerTag != "" {
-		subject = fmt.Sprintf("move-res.%s", moveReq.WorkerTag)
-	}
+	subject := fmt.Sprintf("move-res.%s", moveReq.WorkerTag)
 	sub, err := nc.SubscribeSync(subject)
 	if err != nil {
 		return moveRes, err
@@ -138,6 +138,7 @@ func GetDiagnosticMove(moveReq models.MoveReq) (models.MoveData, error) {
 // PushMove takes a move request and sents it to the move-req NATS stream
 // if it's unable to send the move the the NATS it will respond with an error
 func PushMove(moveReq models.MoveReq) error {
+	moveReq = withDefaultWorkerTag(moveReq)
 	data, err := json.Marshal(moveReq)
 	if err != nil {
 		return err
@@ -155,16 +156,11 @@ func PushMove(moveReq models.MoveReq) error {
 }
 
 // StartMoveResponseConsumers starts one durable processing loop for each
-// explicitly allowed worker tag. An empty allowlist leaves legacy behavior
-// untouched.
+// explicitly allowed worker tag. The default worker tag is always included.
 func StartMoveResponseConsumers(handler func(models.MoveData) error) error {
 	workerTags, err := moveResponseWorkerTags(os.Getenv("MOVE_RESPONSE_WORKER_TAGS"))
 	if err != nil {
 		return err
-	}
-	if len(workerTags) == 0 {
-		log.Warn("MOVE_RESPONSE_WORKER_TAGS is empty; durable move responses are disabled")
-		return nil
 	}
 
 	consumerPrefix := os.Getenv("MOVE_RESPONSE_CONSUMER_PREFIX")
@@ -202,8 +198,9 @@ func StartMoveResponseConsumers(handler func(models.MoveData) error) error {
 }
 
 func moveResponseWorkerTags(value string) ([]string, error) {
-	var workerTags []string
+	workerTags := []string{defaultWorkerTag}
 	seen := make(map[string]struct{})
+	seen[defaultWorkerTag] = struct{}{}
 	for _, workerTag := range strings.Split(value, ",") {
 		workerTag = strings.TrimSpace(workerTag)
 		if workerTag == "" {

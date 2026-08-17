@@ -654,7 +654,7 @@ func main() {
 	// games2/:id/kick can be used to restart a stalled game
 	// ues this route with caution, if a engine worker is stalled waiting
 	// on a move this can stall more workers, using this should
-	// largely not be need now as with newer engine and NATS timeout handling
+	// largely not be needed now with newer engine and NATS timeout handling
 	r.POST("/games2/:id/kick", CheckRole("admin"), func(c *gin.Context) {
 		id := c.Param("id")
 		game, err := db.GetGame2(id)
@@ -827,6 +827,8 @@ func main() {
 		c.JSON(http.StatusOK, settings)
 	})
 
+	// move-req lets admins make synchronous diagnostic engine requests.
+	// It is useful for debugging problematic moves and testing the NATS-to-worker flow
 	r.POST("/move-req", CheckRole("admin"), func(c *gin.Context) {
 		var moveReq models.MoveReq
 		if err := c.ShouldBindJSON(&moveReq); err != nil {
@@ -1011,6 +1013,8 @@ func gameHasWorkerTag(game models.Game2) bool {
 }
 
 func checkStartMoves(newGame models.Game2New) ([]string, error) {
+
+	// no starting position is valid for a normal game
 	if newGame.Moves == "" {
 		return []string{}, nil
 	}

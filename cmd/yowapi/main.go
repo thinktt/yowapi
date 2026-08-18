@@ -29,7 +29,7 @@ func main() {
 
 	loadCmps()
 
-	err := moveque.StartMoveResponseConsumers(games.ApplyEngineMoveResponse)
+	err := moveque.StartMoveConsumers(handleEngineResponse)
 	if err != nil {
 		fmt.Println("Unable to start NATS move response consumers:", err)
 		os.Exit(1)
@@ -494,6 +494,7 @@ func main() {
 		c.JSON(http.StatusOK, game)
 
 		games.PublishGameUpdates(game.ID)
+		go continueGame(game.ID)
 	})
 
 	r.POST("/games2/:id/moves", func(c *gin.Context) {
@@ -524,6 +525,7 @@ func main() {
 			return
 		}
 
+		go continueGame(id)
 		c.JSON(http.StatusCreated, gin.H{"message": "move successfully added"})
 	})
 
@@ -671,8 +673,14 @@ func main() {
 			return
 		}
 
-		// Re-publish from the stored position so the normal CMP turn handler runs again.
-		if err := games.PublishGameUpdates(id); err != nil {
+		// Re-publish the stored state before requesting another engine move.
+		err = games.PublishGameUpdates(id)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "starting engine move: " + err.Error()})
+			return
+		}
+		err = requestEngineMove(id)
+		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "starting engine move: " + err.Error()})
 			return
 		}

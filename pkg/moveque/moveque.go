@@ -155,9 +155,9 @@ func PushMove(moveReq models.MoveReq) error {
 	return err
 }
 
-// StartMoveResponseConsumers starts one durable processing loop for each
+// StartMoveConsumers starts one durable processing loop for each
 // explicitly allowed worker tag. The default worker tag is always included.
-func StartMoveResponseConsumers(handler func(models.MoveData) error) error {
+func StartMoveConsumers(handler func(models.MoveData) error) error {
 	workerTags, err := moveResponseWorkerTags(os.Getenv("MOVE_RESPONSE_WORKER_TAGS"))
 	if err != nil {
 		return err

@@ -30,8 +30,6 @@ func PublishGameUpdates(gameID string) error {
 	jsonData, _ := json.Marshal(gameUpdate)
 	events.Pub.PublishMessage(game.ID, string(jsonData))
 
-	go PlayEngineMove(game)
-
 	return nil
 }
 
@@ -63,37 +61,6 @@ func GetGameUpdate(game models.Game2) models.Game2MutableFields {
 }
 
 // var uciRegex = regexp.MustCompile(`[a-h][1-8][a-h][1-8][qrbn]?`)
-
-func getAlgebraMoveFromChessGame(chessGame *chess.Game, newUciMove string) (string, error) {
-	chess.UseNotation(chess.UCINotation{})(chessGame)
-	err := chessGame.MoveStr(newUciMove)
-	if err != nil {
-		err := fmt.Errorf("error adding coordinate move to chessGame: %s", err.Error())
-		return "", err
-	}
-
-	chess.UseNotation(chess.AlgebraicNotation{})(chessGame)
-	pgn := chessGame.String()
-	pgnSlice := strings.Fields(pgn)
-	if len(pgnSlice) < 3 {
-		err := fmt.Errorf("unable parse algebra move from chessGame: PGN too short")
-		return "", err
-	}
-
-	algebraMove := pgnSlice[len(pgnSlice)-2]
-	return algebraMove, nil
-}
-
-func getUCIMovesFromChessGame(chessGame *chess.Game) ([]string, error) {
-	chess.UseNotation(chess.UCINotation{})(chessGame)
-	moves := make([]string, 0, len(chessGame.Moves()))
-
-	for _, move := range chessGame.Moves() {
-		moves = append(moves, move.String())
-	}
-
-	return moves, nil
-}
 
 func parseToChessGame(moves []string) (*chess.Game, error) {
 	chessGame := chess.NewGame()

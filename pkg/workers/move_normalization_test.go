@@ -27,7 +27,7 @@ func TestNormalizeEngineMoveCheckmateSuffix(t *testing.T) {
 		Kg7 c8=Q f1=Q
 	`)
 
-	rawGame, err := games.ParseGame(models.Game2{MoveList: strings.Fields(moves)})
+	rawGame, err := games.ParseGame(models.Game2{MoveList: moves})
 	if err != nil {
 		t.Fatalf("parseToChessGame() error = %v", err)
 	}
@@ -35,7 +35,7 @@ func TestNormalizeEngineMoveCheckmateSuffix(t *testing.T) {
 		t.Fatal("chess library accepted Qg8+ when the move is checkmate")
 	}
 
-	chessGame, err := games.ParseGame(models.Game2{MoveList: strings.Fields(moves)})
+	chessGame, err := games.ParseGame(models.Game2{MoveList: moves})
 	if err != nil {
 		t.Fatalf("parseToChessGame() error = %v", err)
 	}

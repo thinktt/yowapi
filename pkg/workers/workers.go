@@ -17,7 +17,15 @@ import (
 	"github.com/thinktt/yowapi/pkg/utils"
 )
 
-func PlayEngineMove(game models.Game2) {
+func Start() error {
+	return moveque.StartMoveResponseConsumers(HandleMoveResponse)
+}
+
+func GetDiagnosticMove(moveReq models.MoveReq) (models.MoveData, error) {
+	return moveque.GetDiagnosticMove(moveReq)
+}
+
+func RequestMove(game models.Game2) {
 
 	// the game is over, get out of here
 	if game.Winner != "pending" {
@@ -68,9 +76,9 @@ func PlayEngineMove(game models.Game2) {
 	}
 }
 
-// ApplyEngineMoveResponse handles the engine-specific response details, then
+// HandleMoveResponse handles the engine-specific response details, then
 // hands the move to the normal game move path.
-func ApplyEngineMoveResponse(moveResponse models.MoveData) error {
+func HandleMoveResponse(moveResponse models.MoveData) error {
 	log := logrus.WithFields(logrus.Fields{
 		"gameId":    moveResponse.GameId,
 		"index":     moveResponse.Index,

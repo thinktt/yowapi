@@ -16,6 +16,12 @@ import (
 	"github.com/thinktt/yowapi/pkg/models"
 )
 
+var requestMove func(models.Game2)
+
+func Start(request func(models.Game2)) {
+	requestMove = request
+}
+
 // PublishGameUPdates takes a game ID and gets that game from the DB and then
 // derives the gameUpdate from the game and publishes the update to the streams
 func PublishGameUpdates(gameID string) error {
@@ -30,7 +36,7 @@ func PublishGameUpdates(gameID string) error {
 	jsonData, _ := json.Marshal(gameUpdate)
 	events.Pub.PublishMessage(game.ID, string(jsonData))
 
-	go PlayEngineMove(game)
+	go requestMove(game)
 
 	return nil
 }

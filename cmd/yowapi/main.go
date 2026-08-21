@@ -19,7 +19,6 @@ import (
 	"github.com/thinktt/yowapi/pkg/games"
 	"github.com/thinktt/yowapi/pkg/kingcheck"
 	"github.com/thinktt/yowapi/pkg/models"
-	"github.com/thinktt/yowapi/pkg/moveque"
 	"github.com/thinktt/yowapi/pkg/utils"
 	"github.com/thinktt/yowapi/pkg/workers"
 )
@@ -30,11 +29,13 @@ func main() {
 
 	loadCmps()
 
-	err := moveque.StartMoveResponseConsumers(workers.ApplyEngineMoveResponse)
+	err := workers.Start()
 	if err != nil {
-		fmt.Println("Unable to start NATS move response consumers:", err)
+		fmt.Println("Unable to connect to NATS worker queue:", err)
 		os.Exit(1)
 	}
+
+	games.Start(workers.RequestMove)
 
 	config := cors.DefaultConfig()
 	config.AllowAllOrigins = true
@@ -834,7 +835,7 @@ func main() {
 			return
 		}
 
-		moveData, err := moveque.GetDiagnosticMove(moveReq)
+		moveData, err := workers.GetDiagnosticMove(moveReq)
 		if err != nil {
 			fmt.Println("There was ane error getting the move: ", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"messagge": "queue error"})

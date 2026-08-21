@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/thinktt/yowapi/pkg/db"
 	"github.com/thinktt/yowapi/pkg/events"
 	"github.com/thinktt/yowapi/pkg/games"
 	"github.com/thinktt/yowapi/pkg/models"
@@ -91,7 +90,7 @@ func HandleMoveResponse(moveResponse models.MoveData) error {
 		return nil
 	}
 
-	game, err := db.GetGame2(moveResponse.GameId)
+	game, err := games.GetGame(moveResponse.GameId)
 	if err != nil {
 		return fmt.Errorf("load game for move response: %w", err)
 	}

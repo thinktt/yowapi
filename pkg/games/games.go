@@ -23,6 +23,11 @@ func Start(requestMove func(models.Game2)) {
 	requestWorkerMove = requestMove
 }
 
+// GetGame loads a game by ID for callers in the game flow.
+func GetGame(gameID string) (models.Game2, error) {
+	return db.GetGame2(gameID)
+}
+
 // PublishGameUPdates takes a game ID and gets that game from the DB and then
 // derives the gameUpdate from the game and publishes the update to the streams
 func PublishGameUpdates(gameID string) error {

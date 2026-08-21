@@ -1,10 +1,12 @@
 package engine
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/notnil/chess"
 	"github.com/sirupsen/logrus"
@@ -102,13 +104,13 @@ func (f flow) handleMoveResponse(response models.MoveData) error {
 	}
 
 	if response.Err != nil {
-		events.EngineError(response, *response.Err)
+		publishResponseMessage("engineError", response, *response.Err)
 		log.WithField("engineError", *response.Err).Error("discarding worker move error")
 		return nil
 	}
 
 	if response.Warning != nil {
-		events.EngineWarning(response, *response.Warning)
+		publishResponseMessage("engineWarning", response, *response.Warning)
 		log.WithFields(logrus.Fields{
 			"engineWarning":  *response.Warning,
 			"algebraMove":    response.AlgebraMove,
@@ -148,6 +150,32 @@ func (f flow) handleMoveResponse(response models.MoveData) error {
 	}
 
 	return nil
+}
+
+type responseMessage struct {
+	GameID    string `json:"gameId"`
+	Index     int    `json:"index"`
+	WorkerTag string `json:"workerTag,omitempty"`
+	Message   string `json:"message"`
+	Timestamp int64  `json:"timestamp"`
+}
+
+func publishResponseMessage(eventType string, response models.MoveData, message string) {
+	payload := responseMessage{
+		GameID:    response.GameId,
+		Index:     response.Index,
+		WorkerTag: response.WorkerTag,
+		Message:   message,
+		Timestamp: time.Now().UnixMilli(),
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		logrus.WithError(err).Error("unable to encode engine response event")
+		return
+	}
+
+	events.PublishMessage(response.GameId, eventType, string(data))
 }
 
 func handleGameError(err error, log *logrus.Entry, message string) error {

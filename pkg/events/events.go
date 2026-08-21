@@ -1,12 +1,6 @@
 package events
 
-import (
-	"encoding/json"
-	"time"
-
-	"github.com/sirupsen/logrus"
-	"github.com/thinktt/yowapi/pkg/models"
-)
+import "github.com/thinktt/yowapi/pkg/models"
 
 type Event struct {
 	Type    string
@@ -15,19 +9,19 @@ type Event struct {
 	Message string
 }
 
-type Publisher struct {
+type publisher struct {
 	subscriptions map[*Subscription]struct{}
 }
 
-func (p *Publisher) AddSub(s *Subscription) {
+func (p *publisher) addSub(s *Subscription) {
 	p.subscriptions[s] = struct{}{}
 }
 
-func (p *Publisher) RemoveSub(s *Subscription) {
+func (p *publisher) removeSub(s *Subscription) {
 	delete(p.subscriptions, s)
 }
 
-func (p *Publisher) PublishGame(game models.Game2) {
+func (p *publisher) publishGame(game models.Game2) {
 	event := Event{
 		Type:   "gameUpdate",
 		GameID: game.ID,
@@ -36,68 +30,38 @@ func (p *Publisher) PublishGame(game models.Game2) {
 	p.publish(event)
 }
 
-func (p *Publisher) PublishEvent(gameID, event, data string) {
-	message := Event{Type: event, GameID: gameID, Message: data}
-	p.publish(message)
+func (p *publisher) publishMessage(gameID, eventType, message string) {
+	event := Event{Type: eventType, GameID: gameID, Message: message}
+	p.publish(event)
 }
 
-func (p *Publisher) publish(message Event) {
+func (p *publisher) publish(event Event) {
 	for s := range p.subscriptions {
 		if s.willAcceptAll {
-			s.Channel <- message
+			s.Channel <- event
 			continue
 		}
 
-		_, exist := s.gameIDs[message.GameID]
+		_, exist := s.gameIDs[event.GameID]
 		if exist {
-			s.Channel <- message
+			s.Channel <- event
 		}
 	}
 }
 
 func GameUpdate(game models.Game2) {
-	Pub.PublishGame(game)
+	pub.publishGame(game)
 }
 
-func EngineError(response models.MoveData, message string) {
-	publishEngineEvent("engineError", response, message)
+func PublishMessage(gameID, eventType, message string) {
+	pub.publishMessage(gameID, eventType, message)
 }
 
-func EngineWarning(response models.MoveData, message string) {
-	publishEngineEvent("engineWarning", response, message)
+func SubscriptionCount() int {
+	return len(pub.subscriptions)
 }
 
-type engineEvent struct {
-	GameID    string `json:"gameId"`
-	Index     int    `json:"index"`
-	WorkerTag string `json:"workerTag,omitempty"`
-	Message   string `json:"message"`
-	Timestamp int64  `json:"timestamp"`
-}
-
-func publishEngineEvent(event string, response models.MoveData, message string) {
-	payload := engineEvent{
-		GameID:    response.GameId,
-		Index:     response.Index,
-		WorkerTag: response.WorkerTag,
-		Message:   message,
-		Timestamp: time.Now().UnixMilli(),
-	}
-
-	data, err := json.Marshal(payload)
-	if err != nil {
-		logrus.WithError(err).Error("unable to encode engine event")
-		return
-	}
-
-	Pub.PublishEvent(response.GameId, event, string(data))
-}
-
-func (p *Publisher) GetSubCount() int {
-	return len(p.subscriptions)
-}
-
-var Pub = &Publisher{
+var pub = &publisher{
 	subscriptions: make(map[*Subscription]struct{}),
 }
 
@@ -105,7 +69,6 @@ type Subscription struct {
 	gameIDs       map[string]struct{}
 	willAcceptAll bool
 	Channel       chan Event
-	MessageCount  int
 }
 
 // PublishGame allows an initial game state to be sent directly to a subscription.
@@ -122,13 +85,11 @@ func (s *Subscription) RemoveGameID(gameID string) {
 }
 
 func (s *Subscription) Destroy() {
-	Pub.RemoveSub(s)
+	pub.removeSub(s)
 	close(s.Channel)
 }
 
-// NewSubscription creates a subscription to game events. It will filter events
-// by GameIDs, if GammeIDs list is empty it will all game messages will be
-// published to the subscription
+// NewSubscription filters by game ID. An empty list receives every event.
 func NewSubscription(gameIDs []string) *Subscription {
 	sub := Subscription{
 		gameIDs:       make(map[string]struct{}),
@@ -145,7 +106,7 @@ func NewSubscription(gameIDs []string) *Subscription {
 	}
 
 	// Add the subscription set to the package global publisher
-	Pub.AddSub(&sub)
+	pub.addSub(&sub)
 
 	return &sub
 }

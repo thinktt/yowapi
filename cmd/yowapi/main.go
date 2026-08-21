@@ -330,7 +330,7 @@ func main() {
 	})
 
 	r.GET("/streams/count", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"count": events.Pub.GetSubCount()})
+		c.JSON(http.StatusOK, gin.H{"count": events.SubscriptionCount()})
 	})
 
 	r.GET("/streams/:ids", func(c *gin.Context) {

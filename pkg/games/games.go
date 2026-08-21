@@ -16,10 +16,10 @@ import (
 	"github.com/thinktt/yowapi/pkg/models"
 )
 
-var requestWorkerMove func(models.Game2)
+var requestWorkerMove func(models.Game2) error
 
 // Start registers the function used to request a worker move.
-func Start(requestMove func(models.Game2)) {
+func Start(requestMove func(models.Game2) error) {
 	requestWorkerMove = requestMove
 }
 
@@ -42,7 +42,10 @@ func PublishGameUpdates(gameID string) error {
 	jsonData, _ := json.Marshal(gameUpdate)
 	events.Pub.PublishMessage(game.ID, string(jsonData))
 
-	go requestWorkerMove(game)
+	err = requestWorkerMove(game)
+	if err != nil {
+		return fmt.Errorf("request worker move: %w", err)
+	}
 
 	return nil
 }

@@ -24,11 +24,11 @@ func GetDiagnosticMove(moveReq models.MoveReq) (models.MoveData, error) {
 	return moveque.GetDiagnosticMove(moveReq)
 }
 
-func RequestMove(game models.Game2) {
+func RequestMove(game models.Game2) error {
 
 	// the game is over, get out of here
 	if game.Winner != "pending" {
-		return
+		return nil
 	}
 
 	// look for any cmp playing this game
@@ -45,20 +45,17 @@ func RequestMove(game models.Game2) {
 
 	// no cmp found for this turn, nothing needs to be done
 	if cmpName == "" {
-		// fmt.Println("not a cmp turn")
-		return
+		return nil
 	}
 
 	chessGame, err := games.ParseGame(game)
 	if err != nil {
-		fmt.Println("Error parsing game: ", err.Error())
-		return
+		return fmt.Errorf("parse game for engine move: %w", err)
 	}
 
 	uciMoves, err := games.GetUCIMovesFromChessGame(chessGame)
 	if err != nil {
-		fmt.Println("Error parsing UCI moves: ", err.Error())
-		return
+		return fmt.Errorf("get UCI moves for engine request: %w", err)
 	}
 
 	moveReq := models.MoveReq{
@@ -71,8 +68,10 @@ func RequestMove(game models.Game2) {
 	// Publish one request. The durable response consumer applies the move later.
 	err = moveque.PushMove(moveReq)
 	if err != nil {
-		fmt.Println("Error publishing engine move request: ", err.Error())
+		return fmt.Errorf("publish engine move request: %w", err)
 	}
+
+	return nil
 }
 
 // HandleMoveResponse handles the engine-specific response details, then

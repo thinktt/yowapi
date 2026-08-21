@@ -2,7 +2,6 @@ package games
 
 import (
 	"crypto/rand"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -11,13 +10,17 @@ import (
 	"github.com/akamensky/base58"
 	"github.com/notnil/chess"
 	"github.com/thinktt/yowapi/pkg/db"
-	"github.com/thinktt/yowapi/pkg/events"
 	"github.com/thinktt/yowapi/pkg/lichess"
 	"github.com/thinktt/yowapi/pkg/models"
 )
 
-// PublishGameUPdates takes a game ID and gets that game from the DB and then
-// derives the gameUpdate from the game and publishes the update to the streams
+var publishGameUpdate = func(game models.Game2) {}
+
+func Start(publish func(models.Game2)) {
+	publishGameUpdate = publish
+}
+
+// PublishGameUpdates loads the committed game and publishes it to subscribers.
 func PublishGameUpdates(gameID string) error {
 
 	game, err := db.GetGame2(gameID)
@@ -25,12 +28,13 @@ func PublishGameUpdates(gameID string) error {
 		return err
 	}
 
-	gameUpdate := GetGameUpdate(game)
-
-	jsonData, _ := json.Marshal(gameUpdate)
-	events.Pub.PublishMessage(game.ID, string(jsonData))
+	publishGameUpdate(game)
 
 	return nil
+}
+
+func GetGame(gameID string) (models.Game2, error) {
+	return db.GetGame2(gameID)
 }
 
 func GetGameUpdate(game models.Game2) models.Game2MutableFields {

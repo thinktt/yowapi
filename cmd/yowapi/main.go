@@ -15,11 +15,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/thinktt/yowapi/pkg/auth"
 	"github.com/thinktt/yowapi/pkg/db"
+	"github.com/thinktt/yowapi/pkg/engine"
 	"github.com/thinktt/yowapi/pkg/events"
 	"github.com/thinktt/yowapi/pkg/games"
 	"github.com/thinktt/yowapi/pkg/kingcheck"
 	"github.com/thinktt/yowapi/pkg/models"
-	"github.com/thinktt/yowapi/pkg/moveque"
 	"github.com/thinktt/yowapi/pkg/utils"
 )
 
@@ -29,9 +29,11 @@ func main() {
 
 	loadCmps()
 
-	err := moveque.StartMoveConsumers(handleEngineResponse)
+	games.Start(events.GameUpdate)
+	engineUpdates := events.NewSubscription([]string{})
+	err := engine.Start(engineUpdates.Channel, games.GetGame, games.AddMove, games.OfferDraw)
 	if err != nil {
-		fmt.Println("Unable to start NATS move response consumers:", err)
+		fmt.Println("Unable to start engine:", err)
 		os.Exit(1)
 	}
 
@@ -353,10 +355,7 @@ func main() {
 				if err != nil {
 					continue
 				}
-				gameUpdate := games.GetGameUpdate(game)
-				jsonData, _ := json.Marshal(gameUpdate)
-				gameStream.PublishMessage(string(jsonData))
-
+				gameStream.PublishGame(game)
 			}
 		}()
 
@@ -365,9 +364,17 @@ func main() {
 			case <-clientClosed:
 				fmt.Println("client dropped SSE")
 				return
-			case message := <-gameStream.Channel:
-				c.Writer.Write([]byte("event: " + message.Event + "\n"))
-				c.Writer.Write([]byte("data: " + message.Data + "\n\n"))
+			case event := <-gameStream.Channel:
+				if event.Game != nil {
+					gameUpdate := games.GetGameUpdate(*event.Game)
+					jsonData, err := json.Marshal(gameUpdate)
+					if err != nil {
+						continue
+					}
+					event.Message = string(jsonData)
+				}
+				c.Writer.Write([]byte("event: " + event.Type + "\n"))
+				c.Writer.Write([]byte("data: " + event.Message + "\n\n"))
 				c.Writer.Flush()
 			}
 		}
@@ -494,7 +501,6 @@ func main() {
 		c.JSON(http.StatusOK, game)
 
 		games.PublishGameUpdates(game.ID)
-		go continueGame(game.ID)
 	})
 
 	r.POST("/games2/:id/moves", func(c *gin.Context) {
@@ -525,7 +531,6 @@ func main() {
 			return
 		}
 
-		go continueGame(id)
 		c.JSON(http.StatusCreated, gin.H{"message": "move successfully added"})
 	})
 
@@ -673,13 +678,8 @@ func main() {
 			return
 		}
 
-		// Re-publish the stored state before requesting another engine move.
+		// Re-publish the stored state so the engine requests another move.
 		err = games.PublishGameUpdates(id)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "starting engine move: " + err.Error()})
-			return
-		}
-		err = requestEngineMove(id)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "starting engine move: " + err.Error()})
 			return
@@ -851,7 +851,7 @@ func main() {
 			return
 		}
 
-		moveData, err := moveque.GetDiagnosticMove(moveReq)
+		moveData, err := engine.GetDiagnosticMove(moveReq)
 		if err != nil {
 			fmt.Println("There was ane error getting the move: ", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"messagge": "queue error"})

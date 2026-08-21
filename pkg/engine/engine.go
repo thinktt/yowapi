@@ -1,11 +1,17 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/notnil/chess"
+	"github.com/sirupsen/logrus"
+	"github.com/thinktt/yowapi/pkg/events"
 	"github.com/thinktt/yowapi/pkg/models"
+	"github.com/thinktt/yowapi/pkg/moveque"
+	"github.com/thinktt/yowapi/pkg/utils"
 )
 
 const defaultWorkerTag = "default"
@@ -17,6 +23,149 @@ type Move struct {
 	Index          int
 	Move           string
 	WillAcceptDraw bool
+}
+
+type GetGame func(string) (models.Game2, error)
+type AddMove func(string, string, models.MoveData2) error
+type OfferDraw func(string, string, string) error
+
+type flow struct {
+	getGame   GetGame
+	addMove   AddMove
+	offerDraw OfferDraw
+}
+
+func Start(updates <-chan events.Event, getGame GetGame, addMove AddMove, offerDraw OfferDraw) error {
+	engineFlow := flow{
+		getGame:   getGame,
+		addMove:   addMove,
+		offerDraw: offerDraw,
+	}
+
+	err := moveque.StartMoveConsumers(engineFlow.handleMoveResponse)
+	if err != nil {
+		return err
+	}
+
+	go engineFlow.handleGameUpdates(updates)
+	return nil
+}
+
+func GetDiagnosticMove(moveReq models.MoveReq) (models.MoveData, error) {
+	return moveque.GetDiagnosticMove(moveReq)
+}
+
+func (f flow) handleGameUpdates(updates <-chan events.Event) {
+	for event := range updates {
+		if event.Type != "gameUpdate" {
+			continue
+		}
+		if event.Game == nil {
+			continue
+		}
+
+		err := requestMove(*event.Game)
+		if err != nil {
+			logrus.WithField("gameId", event.GameID).
+				WithError(err).
+				Error("unable to request engine move")
+		}
+	}
+}
+
+func requestMove(game models.Game2) error {
+	moveReq, shouldMove, err := BuildMoveRequest(game)
+	if err != nil {
+		return err
+	}
+	if !shouldMove {
+		return nil
+	}
+
+	err = moveque.PushMove(moveReq)
+	if err != nil {
+		return fmt.Errorf("publish engine move request: %w", err)
+	}
+	return nil
+}
+
+func (f flow) handleMoveResponse(response models.MoveData) error {
+	log := logrus.WithFields(logrus.Fields{
+		"gameId":    response.GameId,
+		"index":     response.Index,
+		"workerTag": response.WorkerTag,
+	})
+
+	if response.GameId == "" {
+		log.Error("discarding move response with no game ID")
+		return nil
+	}
+
+	if response.Err != nil {
+		events.EngineError(response, *response.Err)
+		log.WithField("engineError", *response.Err).Error("discarding worker move error")
+		return nil
+	}
+
+	if response.Warning != nil {
+		events.EngineWarning(response, *response.Warning)
+		log.WithFields(logrus.Fields{
+			"engineWarning":  *response.Warning,
+			"algebraMove":    response.AlgebraMove,
+			"coordinateMove": response.CoordinateMove,
+		}).Warn("worker returned a move warning")
+	}
+
+	game, err := f.getGame(response.GameId)
+	if err != nil {
+		return fmt.Errorf("load game for move response: %w", err)
+	}
+	if game.ID == "" {
+		log.Warn("move response references a missing game")
+		return nil
+	}
+
+	engineMove, err := ParseMoveResponse(game, response)
+	if err != nil {
+		log.WithError(err).Error("discarding invalid engine move response")
+		return nil
+	}
+
+	if engineMove.WillAcceptDraw {
+		err = f.offerDraw(engineMove.GameID, engineMove.PlayerID, engineMove.PlayerColor)
+		if err != nil {
+			return handleGameError(err, log, "discarding invalid engine draw offer")
+		}
+	}
+
+	moveData := models.MoveData2{
+		Index: engineMove.Index,
+		Move:  engineMove.Move,
+	}
+	err = f.addMove(engineMove.GameID, engineMove.PlayerID, moveData)
+	if err != nil {
+		return handleGameError(err, log, "discarding invalid engine move response")
+	}
+
+	return nil
+}
+
+func handleGameError(err error, log *logrus.Entry, message string) error {
+	if isRetryableMoveResponseError(err) {
+		return err
+	}
+	log.WithError(err).Error(message)
+	return nil
+}
+
+// NATS retries infrastructure failures but consumes invalid game responses.
+func isRetryableMoveResponseError(err error) bool {
+	var httpErr *utils.HTTPError
+	if !errors.As(err, &httpErr) {
+		return true
+	}
+	return httpErr.StatusCode == http.StatusInternalServerError &&
+		strings.HasPrefix(httpErr.Message, "DB Error:")
 }
 
 // BuildMoveRequest returns a worker request when the current player is an engine.

@@ -64,7 +64,7 @@ func GetGameUpdate(game models.Game2) models.Game2MutableFields {
 
 // var uciRegex = regexp.MustCompile(`[a-h][1-8][a-h][1-8][qrbn]?`)
 
-func getAlgebraMoveFromChessGame(chessGame *chess.Game, newUciMove string) (string, error) {
+func GetAlgebraMoveFromChessGame(chessGame *chess.Game, newUciMove string) (string, error) {
 	chess.UseNotation(chess.UCINotation{})(chessGame)
 	err := chessGame.MoveStr(newUciMove)
 	if err != nil {
@@ -84,7 +84,7 @@ func getAlgebraMoveFromChessGame(chessGame *chess.Game, newUciMove string) (stri
 	return algebraMove, nil
 }
 
-func getUCIMovesFromChessGame(chessGame *chess.Game) ([]string, error) {
+func GetUCIMovesFromChessGame(chessGame *chess.Game) ([]string, error) {
 	chess.UseNotation(chess.UCINotation{})(chessGame)
 	moves := make([]string, 0, len(chessGame.Moves()))
 

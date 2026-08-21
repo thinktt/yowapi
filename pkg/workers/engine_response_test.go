@@ -1,4 +1,4 @@
-package games
+package workers
 
 import (
 	"errors"
@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/sirupsen/logrus"
+	"github.com/thinktt/yowapi/pkg/games"
 	"github.com/thinktt/yowapi/pkg/models"
 	"github.com/thinktt/yowapi/pkg/utils"
 )
@@ -25,17 +26,17 @@ func TestCurrentEnginePlayerUsesSideToMove(t *testing.T) {
 
 func TestGetAlgebraMoveFromFreshGameAcceptsCoordinateBookMove(t *testing.T) {
 	game := models.Game2{}
-	chessGame, err := ParseGame(game)
+	chessGame, err := games.ParseGame(game)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	move, err := getAlgebraMoveFromChessGame(chessGame, "e2e4")
+	move, err := games.GetAlgebraMoveFromChessGame(chessGame, "e2e4")
 	if err != nil {
-		t.Fatalf("getAlgebraMoveFromChessGame() returned error: %v", err)
+		t.Fatalf("games.GetAlgebraMoveFromChessGame() returned error: %v", err)
 	}
 	if move != "e4" {
-		t.Fatalf("getAlgebraMoveFromChessGame() = %q, want %q", move, "e4")
+		t.Fatalf("games.GetAlgebraMoveFromChessGame() = %q, want %q", move, "e4")
 	}
 }
 

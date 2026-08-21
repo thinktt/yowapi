@@ -1,4 +1,4 @@
-package games
+package workers
 
 import (
 	"encoding/json"
@@ -11,6 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thinktt/yowapi/pkg/db"
 	"github.com/thinktt/yowapi/pkg/events"
+	"github.com/thinktt/yowapi/pkg/games"
 	"github.com/thinktt/yowapi/pkg/models"
 	"github.com/thinktt/yowapi/pkg/moveque"
 	"github.com/thinktt/yowapi/pkg/utils"
@@ -41,13 +42,13 @@ func PlayEngineMove(game models.Game2) {
 		return
 	}
 
-	chessGame, err := ParseGame(game)
+	chessGame, err := games.ParseGame(game)
 	if err != nil {
 		fmt.Println("Error parsing game: ", err.Error())
 		return
 	}
 
-	uciMoves, err := getUCIMovesFromChessGame(chessGame)
+	uciMoves, err := games.GetUCIMovesFromChessGame(chessGame)
 	if err != nil {
 		fmt.Println("Error parsing UCI moves: ", err.Error())
 		return
@@ -108,7 +109,7 @@ func ApplyEngineMoveResponse(moveResponse models.MoveData) error {
 	}
 
 	if moveResponse.WillAcceptDraw {
-		err = OfferDraw(game.ID, cmpName, game.TurnColor())
+		err = games.OfferDraw(game.ID, cmpName, game.TurnColor())
 		if err != nil {
 			if isRetryableMoveResponseError(err) {
 				return err
@@ -122,7 +123,7 @@ func ApplyEngineMoveResponse(moveResponse models.MoveData) error {
 		Index: moveResponse.Index,
 		Move:  move,
 	}
-	err = AddMove(game.ID, cmpName, moveData)
+	err = games.AddMove(game.ID, cmpName, moveData)
 	if err != nil {
 		if isRetryableMoveResponseError(err) {
 			return err
@@ -191,12 +192,12 @@ func getEngineMove(game models.Game2, move string) (string, error) {
 		return move, nil
 	}
 
-	chessGame, err := ParseGame(game)
+	chessGame, err := games.ParseGame(game)
 	if err != nil {
 		return "", err
 	}
 
-	return getAlgebraMoveFromChessGame(chessGame, move)
+	return games.GetAlgebraMoveFromChessGame(chessGame, move)
 }
 
 func isCoordinateMove(move string) bool {

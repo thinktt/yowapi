@@ -21,6 +21,7 @@ import (
 	"github.com/thinktt/yowapi/pkg/models"
 	"github.com/thinktt/yowapi/pkg/moveque"
 	"github.com/thinktt/yowapi/pkg/utils"
+	"github.com/thinktt/yowapi/pkg/workers"
 )
 
 var cmpMap = make(map[string]models.Cmp)
@@ -29,7 +30,7 @@ func main() {
 
 	loadCmps()
 
-	err := moveque.StartMoveResponseConsumers(games.ApplyEngineMoveResponse)
+	err := moveque.StartMoveResponseConsumers(workers.ApplyEngineMoveResponse)
 	if err != nil {
 		fmt.Println("Unable to start NATS move response consumers:", err)
 		os.Exit(1)

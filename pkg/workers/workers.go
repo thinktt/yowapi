@@ -17,7 +17,7 @@ import (
 )
 
 func Start() error {
-	return moveque.StartMoveResponseConsumers(HandleMoveResponse)
+	return moveque.StartMoveResponseConsumer(HandleMoveResponse)
 }
 
 func GetDiagnosticMove(moveReq models.MoveReq) (models.MoveData, error) {

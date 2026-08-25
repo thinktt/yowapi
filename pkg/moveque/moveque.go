@@ -93,18 +93,18 @@ func getMoveReqSubject(moveReq models.MoveReq) string {
 	return fmt.Sprintf("%s.%s", moveReqSubject, moveReq.WorkerTag)
 }
 
-func withDefaultWorkerTag(moveReq models.MoveReq) models.MoveReq {
+func addDefaultWorkerTag(moveReq models.MoveReq) models.MoveReq {
 	if moveReq.WorkerTag == "" {
 		moveReq.WorkerTag = defaultWorkerTag
 	}
 	return moveReq
 }
 
-// GetDiagnosticMove preserves the admin move-request diagnostic. Normal game
-// traffic uses PushMove and the durable response consumer instead.
+// GetDiagnosticMove sends a test move to a worker and waits for the response.
+// It listens for the response directly instead of using the normal consumer.
 func GetDiagnosticMove(moveReq models.MoveReq) (models.MoveData, error) {
 	moveRes := models.MoveData{}
-	moveReq = withDefaultWorkerTag(moveReq)
+	moveReq = addDefaultWorkerTag(moveReq)
 	data, err := json.Marshal(moveReq)
 	if err != nil {
 		return moveRes, err
@@ -117,7 +117,8 @@ func GetDiagnosticMove(moveReq models.MoveReq) (models.MoveData, error) {
 	}
 	defer sub.Unsubscribe()
 
-	if _, err = moveStream.Publish(getMoveReqSubject(moveReq), data); err != nil {
+	_, err = moveStream.Publish(getMoveReqSubject(moveReq), data)
+	if err != nil {
 		return moveRes, err
 	}
 	deadline := time.Now().Add(diagnosticMoveTimeout)
@@ -126,7 +127,8 @@ func GetDiagnosticMove(moveReq models.MoveReq) (models.MoveData, error) {
 		if err != nil {
 			return moveRes, err
 		}
-		if err := json.Unmarshal(msg.Data, &moveRes); err != nil {
+		err = json.Unmarshal(msg.Data, &moveRes)
+		if err != nil {
 			return moveRes, err
 		}
 		if moveRes.GameId == moveReq.GameId {
@@ -138,7 +140,7 @@ func GetDiagnosticMove(moveReq models.MoveReq) (models.MoveData, error) {
 // PushMove takes a move request and sents it to the move-req NATS stream
 // if it's unable to send the move the the NATS it will respond with an error
 func PushMove(moveReq models.MoveReq) error {
-	moveReq = withDefaultWorkerTag(moveReq)
+	moveReq = addDefaultWorkerTag(moveReq)
 	data, err := json.Marshal(moveReq)
 	if err != nil {
 		return err
@@ -158,7 +160,7 @@ func PushMove(moveReq models.MoveReq) error {
 // StartMoveResponseConsumers starts one durable processing loop for each
 // explicitly allowed worker tag. The default worker tag is always included.
 func StartMoveResponseConsumers(handler func(models.MoveData) error) error {
-	workerTags, err := moveResponseWorkerTags(os.Getenv("MOVE_RESPONSE_WORKER_TAGS"))
+	workerTags, err := parseWorkerTags(os.Getenv("MOVE_RESPONSE_WORKER_TAGS"))
 	if err != nil {
 		return err
 	}
@@ -197,7 +199,7 @@ func StartMoveResponseConsumers(handler func(models.MoveData) error) error {
 	return nil
 }
 
-func moveResponseWorkerTags(value string) ([]string, error) {
+func parseWorkerTags(value string) ([]string, error) {
 	workerTags := []string{defaultWorkerTag}
 	seen := make(map[string]struct{})
 	seen[defaultWorkerTag] = struct{}{}
@@ -209,7 +211,8 @@ func moveResponseWorkerTags(value string) ([]string, error) {
 		if !consumerNamePattern.MatchString(workerTag) {
 			return nil, fmt.Errorf("MOVE_RESPONSE_WORKER_TAGS contains invalid worker tag %q", workerTag)
 		}
-		if _, exists := seen[workerTag]; exists {
+		_, exists := seen[workerTag]
+		if exists {
 			continue
 		}
 		seen[workerTag] = struct{}{}
@@ -232,26 +235,31 @@ func consumeMoveResponses(sub *nats.Subscription, handler func(models.MoveData) 
 
 		msg := msgs[0]
 		var moveRes models.MoveData
-		if err := json.Unmarshal(msg.Data, &moveRes); err != nil {
+		err = json.Unmarshal(msg.Data, &moveRes)
+		if err != nil {
 			log.Errorf("Discarding malformed move response: %v", err)
-			if ackErr := msg.Ack(); ackErr != nil {
+			ackErr := msg.Ack()
+			if ackErr != nil {
 				log.Errorf("Error acknowledging malformed move response: %v", ackErr)
 			}
 			continue
 		}
 
-		if err := runMoveResponseHandler(handler, moveRes); err != nil {
+		err = runMoveResponseHandler(handler, moveRes)
+		if err != nil {
 			log.WithFields(logrus.Fields{
 				"gameId": moveRes.GameId,
 				"index":  moveRes.Index,
 			}).Errorf("Retrying move response after processing error: %v", err)
-			if nakErr := msg.NakWithDelay(5 * time.Second); nakErr != nil {
+			nakErr := msg.NakWithDelay(5 * time.Second)
+			if nakErr != nil {
 				log.Errorf("Error negatively acknowledging move response: %v", nakErr)
 			}
 			continue
 		}
 
-		if err := msg.Ack(); err != nil {
+		err = msg.Ack()
+		if err != nil {
 			log.Errorf("Error acknowledging processed move response: %v", err)
 		}
 	}
@@ -259,7 +267,8 @@ func consumeMoveResponses(sub *nats.Subscription, handler func(models.MoveData) 
 
 func runMoveResponseHandler(handler func(models.MoveData) error, moveRes models.MoveData) (err error) {
 	defer func() {
-		if recovered := recover(); recovered != nil {
+		recovered := recover()
+		if recovered != nil {
 			err = fmt.Errorf("panic processing move response: %v", recovered)
 		}
 	}()

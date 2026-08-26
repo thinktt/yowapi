@@ -7,6 +7,7 @@ services:
       - GIN_MODE=debug
       - PORT=8443
       - NATS_URL=nats://zen:4222
+      - API_TAG=dev
       - MOVE_RESPONSE_CONSUMER_PREFIX=yowapi-bee
       - MOVE_RESPONSE_WORKER_TAGS=kingWC,kingWCWizard,kingWCAce,kingWCChaos,kingWCAceChaos,zenRnd0,zenRandom
     env_file:

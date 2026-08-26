@@ -103,6 +103,13 @@ func HandleMoveResponse(moveResponse models.MoveData) error {
 		log.Error("move response arrived when the current player is not an engine")
 		return nil
 	}
+
+	// treat an empty stored worker tag as the default worker
+	// this normalization may belong in the model later
+	if workerTag == "" {
+		workerTag = "default"
+	}
+
 	if moveResponse.WorkerTag != workerTag {
 		log.WithField("expectedWorkerTag", workerTag).Error("move response has the wrong worker tag")
 		return nil

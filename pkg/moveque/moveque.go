@@ -96,33 +96,37 @@ func init() {
 // It listens for the response directly instead of using the normal consumer.
 func GetDiagnosticMove(moveReq models.MoveReq) (models.MoveData, error) {
 	moveRes := models.MoveData{}
-	moveReq = addDefaultWorkerTag(moveReq)
-	moveReq.ApiTag = apiTag
-	data, err := json.Marshal(moveReq)
+	moveReq, data, err := prepareMoveRequest(moveReq)
 	if err != nil {
 		return moveRes, err
 	}
 
+	// create a new subscription to the move response subject
 	diagnosticSub, err := nc.SubscribeSync(responseSubject)
 	if err != nil {
 		return moveRes, err
 	}
 	defer diagnosticSub.Unsubscribe()
 
-	_, err = jetStream.Publish(getMoveReqSubject(moveReq), data)
+	err = publishMoveRequest(moveReq, data)
 	if err != nil {
 		return moveRes, err
 	}
+
+	// watch for move responses, filter for the diagnostic "gameID"
+	// we're looking for then respond with the full move response
 	deadline := time.Now().Add(diagnosticMoveTimeout)
 	for {
 		msg, err := diagnosticSub.NextMsg(time.Until(deadline))
 		if err != nil {
 			return moveRes, err
 		}
+
 		err = json.Unmarshal(msg.Data, &moveRes)
 		if err != nil {
 			return moveRes, err
 		}
+
 		if moveRes.GameId == moveReq.GameId {
 			return moveRes, nil
 		}
@@ -132,22 +136,12 @@ func GetDiagnosticMove(moveReq models.MoveReq) (models.MoveData, error) {
 // PushMove takes a move request and sents it to the move-req NATS stream
 // if it's unable to send the move the the NATS it will respond with an error
 func PushMove(moveReq models.MoveReq) error {
-	moveReq = addDefaultWorkerTag(moveReq)
-	moveReq.ApiTag = apiTag
-	data, err := json.Marshal(moveReq)
+	moveReq, data, err := prepareMoveRequest(moveReq)
 	if err != nil {
 		return err
 	}
 
-	reqSubject := getMoveReqSubject(moveReq)
-	log.WithFields(logrus.Fields{
-		"gameId":    moveReq.GameId,
-		"workerTag": moveReq.WorkerTag,
-		"subject":   reqSubject,
-	}).Debug("pushing move request")
-
-	_, err = jetStream.Publish(reqSubject, data)
-	return err
+	return publishMoveRequest(moveReq, data)
 }
 
 // StartMoveResponseConsumer starts this API's durable response consumer.
@@ -159,6 +153,31 @@ func StartMoveResponseConsumer(handler func(models.MoveData) error) error {
 	}).Info("started durable move response consumer")
 	go consumeMoveResponses(responseSubscription, handler)
 	return nil
+}
+
+func prepareMoveRequest(moveReq models.MoveReq) (models.MoveReq, []byte, error) {
+	if moveReq.WorkerTag == "" {
+		moveReq.WorkerTag = "default"
+	}
+	moveReq.ApiTag = apiTag
+	data, err := json.Marshal(moveReq)
+	if err != nil {
+		return moveReq, nil, err
+	}
+
+	return moveReq, data, nil
+}
+
+func publishMoveRequest(moveReq models.MoveReq, data []byte) error {
+	reqSubject := fmt.Sprintf("move-req.%s", moveReq.WorkerTag)
+	log.WithFields(logrus.Fields{
+		"gameId":    moveReq.GameId,
+		"workerTag": moveReq.WorkerTag,
+		"subject":   reqSubject,
+	}).Debug("pushing move request")
+
+	_, err := jetStream.Publish(reqSubject, data)
+	return err
 }
 
 func ensureStream(js nats.JetStreamContext, name string, subjects []string) error {
@@ -180,17 +199,6 @@ func ensureStream(js nats.JetStreamContext, name string, subjects []string) erro
 	streamConfig.Subjects = subjects
 	_, err = js.UpdateStream(streamConfig)
 	return err
-}
-
-func getMoveReqSubject(moveReq models.MoveReq) string {
-	return fmt.Sprintf("move-req.%s", moveReq.WorkerTag)
-}
-
-func addDefaultWorkerTag(moveReq models.MoveReq) models.MoveReq {
-	if moveReq.WorkerTag == "" {
-		moveReq.WorkerTag = "default"
-	}
-	return moveReq
 }
 
 func consumeMoveResponses(sub *nats.Subscription, handler func(models.MoveData) error) {

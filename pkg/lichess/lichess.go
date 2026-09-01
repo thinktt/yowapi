@@ -19,6 +19,11 @@ type LichessInfo struct {
 }
 
 func ImportGame(pgn string) (LichessInfo, error) {
+	if token == "" {
+		err := fmt.Errorf("lichess token is not configured")
+		return LichessInfo{}, err
+	}
+
 	body := strings.NewReader("pgn=" + url.QueryEscape(pgn))
 	req, err := http.NewRequest("POST", baseUrl+"/import", body)
 	if err != nil {

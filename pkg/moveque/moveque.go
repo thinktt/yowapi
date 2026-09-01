@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -12,14 +13,20 @@ import (
 )
 
 var log = logrus.New()
-var moveStream nats.JetStreamContext
+var jetStream nats.JetStreamContext
 var nc *nats.Conn
+var responseSubscription *nats.Subscription
+var apiTag string
+var responseSubject string
+var responseConsumerName string
 
-const moveReqStreamName = "move-req-stream"
-const moveResStreamName = "move-res-stream"
-const moveReqSubject = "move-req"
+const (
+	requestStreamName     = "move-req-stream"
+	responseStreamName    = "move-res-stream"
+	diagnosticMoveTimeout = 15 * time.Minute
+)
 
-var moveReqStreamSubjects = []string{moveReqSubject, moveReqSubject + ".*"}
+var consumerNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 func init() {
 	var err error
@@ -37,30 +44,140 @@ func init() {
 		log.Println("NATS_URL set to:", natsUrl)
 	}
 
+	apiTag = os.Getenv("API_TAG")
+	if apiTag == "" {
+		apiTag = "default"
+	}
+	if !consumerNamePattern.MatchString(apiTag) {
+		log.Fatalf("API_TAG contains invalid characters: %q", apiTag)
+	}
+
 	nc, err = nats.Connect(natsUrl, nats.Token(token))
 	if err != nil {
 		log.Fatalf("Error connecting to NATS: %v", err)
 	}
 
 	// Create a JetStream Context
-	js, err := nc.JetStream()
+	jetStream, err = nc.JetStream()
 	if err != nil {
 		log.Fatalf("Error creating JetStream context: %v", err)
 	}
 
-	err = ensureStream(js, moveReqStreamName, moveReqStreamSubjects)
+	err = ensureStream(jetStream, requestStreamName, []string{"move-req.*"})
 	if err != nil {
-		log.Fatalf("Failed to create or update %s: %v", moveReqStreamName, err)
+		log.Fatalf("Failed to create or update %s: %v", requestStreamName, err)
 	}
 	log.Println("move-req-stream found or created")
 
-	err = ensureStream(js, moveResStreamName, []string{"move-res.*"})
+	err = ensureStream(jetStream, responseStreamName, []string{"move-res.*"})
 	if err != nil {
-		log.Fatalf("Failed to create or update %s: %v", moveResStreamName, err)
+		log.Fatalf("Failed to create or update %s: %v", responseStreamName, err)
 	}
 	log.Println("move-res-stream found or created")
 
-	moveStream = js
+	responseSubject = fmt.Sprintf("move-res.%s", apiTag)
+	responseConsumerName = fmt.Sprintf("yowapi-%s-v1", apiTag)
+	responseSubscription, err = jetStream.PullSubscribe(
+		responseSubject,
+		responseConsumerName,
+		nats.BindStream(responseStreamName),
+		nats.DeliverAll(),
+		nats.ManualAck(),
+		nats.AckWait(time.Minute),
+		nats.MaxAckPending(1),
+	)
+	if err != nil {
+		log.Fatalf("Failed to create or bind response consumer: %v", err)
+	}
+
+}
+
+// GetDiagnosticMove sends a test move to a worker and waits for the response.
+// It listens for the response directly instead of using the normal consumer.
+func GetDiagnosticMove(moveReq models.MoveReq) (models.MoveData, error) {
+	moveRes := models.MoveData{}
+	moveReq, data, err := prepareMoveRequest(moveReq)
+	if err != nil {
+		return moveRes, err
+	}
+
+	// create a new subscription to the move response subject
+	diagnosticSub, err := nc.SubscribeSync(responseSubject)
+	if err != nil {
+		return moveRes, err
+	}
+	defer diagnosticSub.Unsubscribe()
+
+	err = publishMoveRequest(moveReq, data)
+	if err != nil {
+		return moveRes, err
+	}
+
+	// watch for move responses, filter for the diagnostic "gameID"
+	// we're looking for then respond with the full move response
+	deadline := time.Now().Add(diagnosticMoveTimeout)
+	for {
+		msg, err := diagnosticSub.NextMsg(time.Until(deadline))
+		if err != nil {
+			return moveRes, err
+		}
+
+		err = json.Unmarshal(msg.Data, &moveRes)
+		if err != nil {
+			return moveRes, err
+		}
+
+		if moveRes.GameId == moveReq.GameId {
+			return moveRes, nil
+		}
+	}
+}
+
+// PushMove takes a move request and sents it to the move-req NATS stream
+// if it's unable to send the move the the NATS it will respond with an error
+func PushMove(moveReq models.MoveReq) error {
+	moveReq, data, err := prepareMoveRequest(moveReq)
+	if err != nil {
+		return err
+	}
+
+	return publishMoveRequest(moveReq, data)
+}
+
+// StartMoveResponseConsumer starts this API's durable response consumer.
+func StartMoveResponseConsumer(handler func(models.MoveData) error) error {
+	log.WithFields(logrus.Fields{
+		"consumer": responseConsumerName,
+		"subject":  responseSubject,
+		"apiTag":   apiTag,
+	}).Info("started durable move response consumer")
+	go consumeMoveResponses(responseSubscription, handler)
+	return nil
+}
+
+func prepareMoveRequest(moveReq models.MoveReq) (models.MoveReq, []byte, error) {
+	if moveReq.WorkerTag == "" {
+		moveReq.WorkerTag = "default"
+	}
+	moveReq.ApiTag = apiTag
+	data, err := json.Marshal(moveReq)
+	if err != nil {
+		return moveReq, nil, err
+	}
+
+	return moveReq, data, nil
+}
+
+func publishMoveRequest(moveReq models.MoveReq, data []byte) error {
+	reqSubject := fmt.Sprintf("move-req.%s", moveReq.WorkerTag)
+	log.WithFields(logrus.Fields{
+		"gameId":    moveReq.GameId,
+		"workerTag": moveReq.WorkerTag,
+		"subject":   reqSubject,
+	}).Debug("pushing move request")
+
+	_, err := jetStream.Publish(reqSubject, data)
+	return err
 }
 
 func ensureStream(js nats.JetStreamContext, name string, subjects []string) error {
@@ -84,117 +201,46 @@ func ensureStream(js nats.JetStreamContext, name string, subjects []string) erro
 	return err
 }
 
-func getMoveReqSubject(moveReq models.MoveReq) string {
-	// if there's no worker tag then the subject is just the base subject
-	if moveReq.WorkerTag == "" {
-		return moveReqSubject
-	}
-
-	// otherwise return the base subject with the sub subject appended
-	return fmt.Sprintf("%s.%s", moveReqSubject, moveReq.WorkerTag)
-}
-
-// GetMove works with NATS in a request and response fashion, it sends a
-// move to NATS and waits to hear back a response from that particular move
-// it eventually fails or times out, it can be used to treat the king workers
-// and NATS pub sub like an old school server
-func GetMove(moveReq models.MoveReq) (models.MoveData, error) {
-	moveRes := models.MoveData{}
-
-	// Serialize moveReq to JSON
-	data, err := json.Marshal(moveReq)
-	if err != nil {
-		return moveRes, err
-	}
-
-	subject := fmt.Sprintf("move-res.%s", moveReq.GameId)
-
-	// Set up a subscription
-	sub, err := nc.SubscribeSync(subject)
-	if err != nil {
-		log.Errorf("Error subscribing to subject: %v", err)
-		return moveRes, err
-	}
-	defer sub.Unsubscribe()
-
-	reqSubject := getMoveReqSubject(moveReq)
-	log.WithFields(logrus.Fields{
-		"gameId":    moveReq.GameId,
-		"workerTag": moveReq.WorkerTag,
-		"subject":   reqSubject,
-	}).Debug("publishing move request")
-
-	_, err = moveStream.Publish(reqSubject, data)
-	if err != nil {
-		// log.Error(err)
-		return moveRes, err
-	}
-
-	// Wait for a single message
-	msg, err := sub.NextMsg(time.Second * 60) // Waits up to 10 seconds
-	if err != nil {
-		log.Errorf("Error receiving message: %v", err)
-		return moveRes, err
-	}
-
-	// ack this message so we will not get it again
-	msg.Ack()
-
-	// Process your message here, e.g.,:
-	// fmt.Printf("Received message: %s\n", msg.Data)
-
-	// Parse the message into moveRes
-	if err := json.Unmarshal(msg.Data, &moveRes); err != nil {
-		log.Errorf("Error parsing message data: %v", err)
-		return moveRes, err
-	}
-
-	return moveRes, nil
-}
-
-// PushMove takes a move request and sents it to the move-req NATS stream
-// if it's unable to send the move the the NATS it will respond with an error
-func PushMove(moveReq models.MoveReq) error {
-	data, err := json.Marshal(moveReq)
-	if err != nil {
-		return err
-	}
-
-	reqSubject := getMoveReqSubject(moveReq)
-	log.WithFields(logrus.Fields{
-		"gameId":    moveReq.GameId,
-		"workerTag": moveReq.WorkerTag,
-		"subject":   reqSubject,
-	}).Debug("pushing move request")
-
-	_, err = moveStream.Publish(reqSubject, data)
-	return err
-}
-
-// GetMoveResChan returns a channel that streams move responses from
-// NATs and the King workers
-func GetMoveResChan() (<-chan models.MoveData, error) {
-	resChan := make(chan models.MoveData)
-	subject := "move-res.*"
-
-	// Subscribe to the move response subject
-	sub, err := nc.Subscribe(subject, func(msg *nats.Msg) {
-		var moveRes models.MoveData
-		if err := json.Unmarshal(msg.Data, &moveRes); err != nil {
-			log.Errorf("Error unmarshaling move response: %v", err)
-			return
+func consumeMoveResponses(sub *nats.Subscription, handler func(models.MoveData) error) {
+	for {
+		msgs, err := sub.Fetch(1, nats.MaxWait(time.Second))
+		if err == nats.ErrTimeout {
+			continue
 		}
-		resChan <- moveRes
-	})
-	if err != nil {
-		return nil, err
+		if err != nil {
+			log.Errorf("Error fetching move response: %v", err)
+			time.Sleep(time.Second)
+			continue
+		}
+
+		msg := msgs[0]
+		var moveRes models.MoveData
+		err = json.Unmarshal(msg.Data, &moveRes)
+		if err != nil {
+			log.Errorf("Discarding malformed move response: %v", err)
+			ackErr := msg.Ack()
+			if ackErr != nil {
+				log.Errorf("Error acknowledging malformed move response: %v", ackErr)
+			}
+			continue
+		}
+
+		err = handler(moveRes)
+		if err != nil {
+			log.WithFields(logrus.Fields{
+				"gameId": moveRes.GameId,
+				"index":  moveRes.Index,
+			}).Errorf("Retrying move response after processing error: %v", err)
+			nakErr := msg.NakWithDelay(5 * time.Second)
+			if nakErr != nil {
+				log.Errorf("Error negatively acknowledging move response: %v", nakErr)
+			}
+			continue
+		}
+
+		err = msg.Ack()
+		if err != nil {
+			log.Errorf("Error acknowledging processed move response: %v", err)
+		}
 	}
-
-	// Set up a handler for when the connection closes
-	nc.SetClosedHandler(func(_ *nats.Conn) {
-		sub.Unsubscribe()
-		close(resChan)
-	})
-
-	return resChan, nil
 }

@@ -16,6 +16,18 @@ import (
 	"github.com/thinktt/yowapi/pkg/models"
 )
 
+var requestWorkerMove func(models.Game2) error
+
+// Start registers the function used to request a worker move.
+func Start(requestMove func(models.Game2) error) {
+	requestWorkerMove = requestMove
+}
+
+// GetGame loads a game by ID for callers in the game flow.
+func GetGame(gameID string) (models.Game2, error) {
+	return db.GetGame2(gameID)
+}
+
 // PublishGameUPdates takes a game ID and gets that game from the DB and then
 // derives the gameUpdate from the game and publishes the update to the streams
 func PublishGameUpdates(gameID string) error {
@@ -30,7 +42,10 @@ func PublishGameUpdates(gameID string) error {
 	jsonData, _ := json.Marshal(gameUpdate)
 	events.Pub.PublishMessage(game.ID, string(jsonData))
 
-	go PlayEngineMove(game)
+	err = requestWorkerMove(game)
+	if err != nil {
+		return fmt.Errorf("request worker move: %w", err)
+	}
 
 	return nil
 }
@@ -64,7 +79,8 @@ func GetGameUpdate(game models.Game2) models.Game2MutableFields {
 
 // var uciRegex = regexp.MustCompile(`[a-h][1-8][a-h][1-8][qrbn]?`)
 
-func getAlgebraMoveFromChessGame(chessGame *chess.Game, newUciMove string) (string, error) {
+func GetAlgebraMoveFromChessGame(chessGame *chess.Game, newUciMove string) (string, error) {
+	chess.UseNotation(chess.UCINotation{})(chessGame)
 	err := chessGame.MoveStr(newUciMove)
 	if err != nil {
 		err := fmt.Errorf("error adding coordinate move to chessGame: %s", err.Error())
@@ -83,7 +99,7 @@ func getAlgebraMoveFromChessGame(chessGame *chess.Game, newUciMove string) (stri
 	return algebraMove, nil
 }
 
-func getUCIMovesFromChessGame(chessGame *chess.Game) ([]string, error) {
+func GetUCIMovesFromChessGame(chessGame *chess.Game) ([]string, error) {
 	chess.UseNotation(chess.UCINotation{})(chessGame)
 	moves := make([]string, 0, len(chessGame.Moves()))
 

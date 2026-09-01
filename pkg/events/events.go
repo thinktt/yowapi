@@ -1,5 +1,10 @@
 package events
 
+type Message struct {
+	Event string
+	Data  string
+}
+
 type Publisher struct {
 	subscriptions map[*Subscription]struct{}
 }
@@ -13,15 +18,20 @@ func (p *Publisher) RemoveSub(s *Subscription) {
 }
 
 func (p *Publisher) PublishMessage(gameID, msg string) {
+	p.PublishEvent(gameID, "gameUpdate", msg)
+}
+
+func (p *Publisher) PublishEvent(gameID, event, data string) {
+	message := Message{Event: event, Data: data}
 	for s := range p.subscriptions {
 		if s.willAcceptAll {
-			s.Channel <- msg
+			s.Channel <- message
 			continue
 		}
 
 		_, exist := s.gameIDs[gameID]
 		if exist {
-			s.Channel <- msg
+			s.Channel <- message
 		}
 	}
 }
@@ -37,13 +47,13 @@ var Pub = &Publisher{
 type Subscription struct {
 	gameIDs       map[string]struct{}
 	willAcceptAll bool
-	Channel       chan string
+	Channel       chan Message
 	MessageCount  int
 }
 
 // PublishMessage allows you to directly publish messages ot this subscription
 func (s *Subscription) PublishMessage(msg string) {
-	s.Channel <- msg
+	s.Channel <- Message{Event: "gameUpdate", Data: msg}
 }
 
 func (s *Subscription) AddGameID(gameID string) {
@@ -66,7 +76,7 @@ func NewSubscription(gameIDs []string) *Subscription {
 	sub := Subscription{
 		gameIDs:       make(map[string]struct{}),
 		willAcceptAll: false,
-		Channel:       make(chan string),
+		Channel:       make(chan Message),
 	}
 
 	if len(gameIDs) == 0 {

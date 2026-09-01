@@ -1,8 +1,11 @@
-package games
+package workers
 
 import (
 	"strings"
 	"testing"
+
+	"github.com/thinktt/yowapi/pkg/games"
+	"github.com/thinktt/yowapi/pkg/models"
 )
 
 func TestNormalizeEngineMoveCheckmateSuffix(t *testing.T) {
@@ -24,7 +27,7 @@ func TestNormalizeEngineMoveCheckmateSuffix(t *testing.T) {
 		Kg7 c8=Q f1=Q
 	`)
 
-	rawGame, err := parseToChessGame(moves)
+	rawGame, err := games.ParseGame(models.Game2{MoveList: moves})
 	if err != nil {
 		t.Fatalf("parseToChessGame() error = %v", err)
 	}
@@ -32,7 +35,7 @@ func TestNormalizeEngineMoveCheckmateSuffix(t *testing.T) {
 		t.Fatal("chess library accepted Qg8+ when the move is checkmate")
 	}
 
-	chessGame, err := parseToChessGame(moves)
+	chessGame, err := games.ParseGame(models.Game2{MoveList: moves})
 	if err != nil {
 		t.Fatalf("parseToChessGame() error = %v", err)
 	}
@@ -45,7 +48,7 @@ func TestNormalizeEngineMoveCheckmateSuffix(t *testing.T) {
 		t.Fatalf("chess library rejected normalized move %q: %v", move, err)
 	}
 
-	properMove, err := GetProperLastMove(chessGame)
+	properMove, err := games.GetProperLastMove(chessGame)
 	if err != nil {
 		t.Fatalf("GetProperLastMove() error = %v", err)
 	}
@@ -53,7 +56,7 @@ func TestNormalizeEngineMoveCheckmateSuffix(t *testing.T) {
 		t.Errorf("GetProperLastMove() = %q, want %q", properMove, "Qg8#")
 	}
 
-	winner, method := GetGameStatus(chessGame)
+	winner, method := games.GetGameStatus(chessGame)
 	if winner != "white" || method != "mate" {
 		t.Errorf("GetGameStatus() = (%q, %q), want (%q, %q)", winner, method, "white", "mate")
 	}

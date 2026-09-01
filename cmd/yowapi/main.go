@@ -19,8 +19,8 @@ import (
 	"github.com/thinktt/yowapi/pkg/games"
 	"github.com/thinktt/yowapi/pkg/kingcheck"
 	"github.com/thinktt/yowapi/pkg/models"
-	"github.com/thinktt/yowapi/pkg/moveque"
 	"github.com/thinktt/yowapi/pkg/utils"
+	"github.com/thinktt/yowapi/pkg/workers"
 )
 
 var cmpMap = make(map[string]models.Cmp)
@@ -28,7 +28,14 @@ var cmpMap = make(map[string]models.Cmp)
 func main() {
 
 	loadCmps()
-	// fmt.Println(cmpMap["Ash"])
+
+	err := workers.Start()
+	if err != nil {
+		fmt.Println("Unable to connect to NATS worker queue:", err)
+		os.Exit(1)
+	}
+
+	games.Start(workers.RequestMove)
 
 	config := cors.DefaultConfig()
 	config.AllowAllOrigins = true
@@ -39,16 +46,6 @@ func main() {
 		fmt.Println("No PORT environment variable detected, defaulting to 8080")
 		port = "8080"
 	}
-
-	// liveGamesIDs, err := db.GetAllLiveGameIDs()
-	// if err != nil {
-	// 	fmt.Errorf("Not able to get live games: %s", err.Error())
-	// }
-
-	// // make moves for any games that ar waiting for the engine
-	// for _, id := range liveGamesIDs {
-	// 	go games.PublishGameUpdates(id)
-	// }
 
 	r := gin.New()
 	r.Use(cors.New(config))
@@ -360,9 +357,9 @@ func main() {
 			case <-clientClosed:
 				fmt.Println("client dropped SSE")
 				return
-			case gameData := <-gameStream.Channel:
-				c.Writer.Write([]byte("event: gameUpdate\n"))
-				c.Writer.Write([]byte("data: " + gameData + "\n\n"))
+			case message := <-gameStream.Channel:
+				c.Writer.Write([]byte("event: " + message.Event + "\n"))
+				c.Writer.Write([]byte("data: " + message.Data + "\n\n"))
 				c.Writer.Flush()
 			}
 		}
@@ -424,7 +421,7 @@ func main() {
 			Method:        "",
 			Moves:         "",
 			MoveList:      []string{},
-			Tags:          []string{},
+			Tags:          newGame.Tags,
 			WhiteWillDraw: false,
 			BlackWillDraw: false,
 			WhitePlayer:   newGame.WhitePlayer,
@@ -432,6 +429,18 @@ func main() {
 		}
 
 		err := checkHasValidCMP(game)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		// only admins can create games from starting positions for now
+		if newGame.Moves != "" && !hasRole(c, "admin") {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "starting moves require admin role"})
+			return
+		}
+
+		game.MoveList, err = checkStartMoves(newGame)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -634,43 +643,33 @@ func main() {
 	// ..... Admin routes start here......
 	//.....................................
 
-	r.POST("/games2/from-position", CheckRole("admin"), func(c *gin.Context) {
-		var newGame models.Game2FromPosition
-
-		if err := c.ShouldBindJSON(&newGame); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		game, err := buildGameFromPosition(newGame)
+	// games2/:id/kick can be used to restart a stalled game
+	// ues this route with caution, if a engine worker is stalled waiting
+	// on a move this can stall more workers, using this should
+	// largely not be needed now with newer engine and NATS timeout handling
+	r.POST("/games2/:id/kick", CheckRole("admin"), func(c *gin.Context) {
+		id := c.Param("id")
+		game, err := db.GetGame2(id)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "DB Error: " + err.Error()})
+			return
+		}
+		if game.ID == "" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "game not found"})
+			return
+		}
+		if game.Winner != "pending" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "game is finished"})
 			return
 		}
 
-		if err := checkHasValidCMP(game); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		// Re-publish from the stored position so the normal CMP turn handler runs again.
+		if err := games.PublishGameUpdates(id); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "starting engine move: " + err.Error()})
 			return
 		}
 
-		if err := checkHasValidWorkerTag(game); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		result, err := db.CreateGame2(game)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"message": "DB Error: " + err.Error()})
-			return
-		}
-
-		if result.MatchedCount > 0 {
-			c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("game %s already exist, no new creation", game.ID)})
-			return
-		}
-
-		c.JSON(http.StatusOK, game)
-		games.PublishGameUpdates(game.ID)
+		c.JSON(http.StatusAccepted, gin.H{"message": "engine move requested"})
 	})
 
 	r.POST("/games2/:id/lichessID", CheckRole("admin"), func(c *gin.Context) {
@@ -820,6 +819,8 @@ func main() {
 		c.JSON(http.StatusOK, settings)
 	})
 
+	// move-req lets admins make synchronous diagnostic engine requests.
+	// It is useful for debugging problematic moves and testing the NATS-to-worker flow
 	r.POST("/move-req", CheckRole("admin"), func(c *gin.Context) {
 		var moveReq models.MoveReq
 		if err := c.ShouldBindJSON(&moveReq); err != nil {
@@ -834,7 +835,7 @@ func main() {
 			return
 		}
 
-		moveData, err := moveque.GetMove(moveReq)
+		moveData, err := workers.GetDiagnosticMove(moveReq)
 		if err != nil {
 			fmt.Println("There was ane error getting the move: ", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"messagge": "queue error"})
@@ -1003,41 +1004,34 @@ func gameHasWorkerTag(game models.Game2) bool {
 	return game.WhitePlayer.WorkerTag != "" || game.BlackPlayer.WorkerTag != ""
 }
 
-func buildGameFromPosition(newGame models.Game2FromPosition) (models.Game2, error) {
+func checkStartMoves(newGame models.Game2New) ([]string, error) {
+
+	// no starting position is valid for a normal game
+	if newGame.Moves == "" {
+		return []string{}, nil
+	}
+
 	moveList := strings.Fields(newGame.Moves)
 	if len(moveList) == 0 {
-		return models.Game2{}, fmt.Errorf("starting position requires at least one move")
+		return nil, fmt.Errorf("starting position requires at least one move")
 	}
 
-	now := time.Now().UnixMilli()
-	id, _ := games.GetGameID()
 	game := models.Game2{
-		ID:            id,
-		LichessID:     "",
-		CreatedAt:     now,
-		LastMoveAt:    now,
-		Winner:        "pending",
-		Method:        "",
-		Moves:         "",
-		MoveList:      moveList,
-		Tags:          newGame.Tags,
-		WhiteWillDraw: false,
-		BlackWillDraw: false,
-		WhitePlayer:   newGame.WhitePlayer,
-		BlackPlayer:   newGame.BlackPlayer,
+		MoveList:    moveList,
+		WhitePlayer: newGame.WhitePlayer,
+		BlackPlayer: newGame.BlackPlayer,
 	}
-
 	chessGame, err := games.ParseGame(game)
 	if err != nil {
-		return models.Game2{}, err
+		return nil, err
 	}
 
 	winner, _ := games.GetGameStatus(chessGame)
 	if winner != "pending" {
-		return models.Game2{}, fmt.Errorf("starting position is already a finished game")
+		return nil, fmt.Errorf("starting position is already a finished game")
 	}
 
-	return game, nil
+	return moveList, nil
 }
 
 func gameHasUser(game models.Game2, user string) bool {

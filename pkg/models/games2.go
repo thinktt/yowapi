@@ -8,27 +8,29 @@ type Player struct {
 	WorkerTag string `json:"workerTag,omitempty" bson:"workerTag,omitempty" binding:"omitempty,alphanum,max=32"`
 }
 type Game2New struct {
-	LichessID   string   `json:"lichessId" bson:"lichessId" binding:"omitempty,alphanum,min=8,max=8"`
-	WhitePlayer Player   `json:"whitePlayer" bson:"whitePlayer" binding:"required"`
-	BlackPlayer Player   `json:"blackPlayer" bson:"blackPlayer" binding:"required"`
-	Moves       string   `json:"moves,omitempty" bson:"moves,omitempty"`
-	Tags        []string `json:"tags,omitempty" binding:"omitempty,dive,alphanum,max=32"`
+	LichessID      string   `json:"lichessId" bson:"lichessId" binding:"omitempty,alphanum,min=8,max=8"`
+	WhitePlayer    Player   `json:"whitePlayer" bson:"whitePlayer" binding:"required"`
+	BlackPlayer    Player   `json:"blackPlayer" bson:"blackPlayer" binding:"required"`
+	Moves          string   `json:"moves,omitempty" bson:"moves,omitempty"`
+	Tags           []string `json:"tags,omitempty" binding:"omitempty,dive,alphanum,max=32"`
+	RandomOverride *int     `json:"randomOverride,omitempty" bson:"randomOverride,omitempty" binding:"omitempty,min=0,max=100"`
 }
 
 type Game2 struct {
-	ID            string   `json:"id" bson:"id" binding:"required,alphanum,min=8,max=9"`
-	LichessID     string   `json:"lichessId" bson:"lichessId"  binding:"alphanum,min=8,max=8"`
-	CreatedAt     int64    `json:"createdAt" bson:"createdAt" binding:"required"`
-	LastMoveAt    int64    `json:"lastMoveAt" bson:"lastMoveAt" binding:"required"`
-	Winner        string   `json:"winner" bson:"winner" binding:"required,oneof=pending white black draw"`
-	Method        string   `json:"method,omitempty" bson:"method,omitempty" binding:"omitempty,oneof=mate resign material mutual stalemate threefold fiftyMove time"`
-	Moves         string   `json:"moves" bson:"moves,omitempty" binding:"required"`
-	MoveList      []string `json:"moveList,omitempty" bson:"moveList"`
-	Tags          []string `json:"tags,omitempty" bson:"tags,omitempty" binding:"omitempty,dive,alphanum,max=32"`
-	WhitePlayer   Player   `json:"whitePlayer" bson:"whitePlayer" binding:"required"`
-	BlackPlayer   Player   `json:"blackPlayer" bson:"blackPlayer" binding:"required"`
-	WhiteWillDraw bool     `json:"whiteWillDraw,omitempty" bson:"whiteWillDraw"`
-	BlackWillDraw bool     `json:"blackWillDraw,omitempty" bson:"blackWillDraw"`
+	ID             string   `json:"id" bson:"id" binding:"required,alphanum,min=8,max=9"`
+	LichessID      string   `json:"lichessId" bson:"lichessId"  binding:"alphanum,min=8,max=8"`
+	CreatedAt      int64    `json:"createdAt" bson:"createdAt" binding:"required"`
+	LastMoveAt     int64    `json:"lastMoveAt" bson:"lastMoveAt" binding:"required"`
+	Winner         string   `json:"winner" bson:"winner" binding:"required,oneof=pending white black draw"`
+	Method         string   `json:"method,omitempty" bson:"method,omitempty" binding:"omitempty,oneof=mate resign material mutual stalemate threefold fiftyMove time"`
+	Moves          string   `json:"moves" bson:"moves,omitempty" binding:"required"`
+	MoveList       []string `json:"moveList,omitempty" bson:"moveList"`
+	Tags           []string `json:"tags,omitempty" bson:"tags,omitempty" binding:"omitempty,dive,alphanum,max=32"`
+	WhitePlayer    Player   `json:"whitePlayer" bson:"whitePlayer" binding:"required"`
+	BlackPlayer    Player   `json:"blackPlayer" bson:"blackPlayer" binding:"required"`
+	RandomOverride *int     `json:"randomOverride,omitempty" bson:"randomOverride,omitempty" binding:"omitempty,min=0,max=100"`
+	WhiteWillDraw  bool     `json:"whiteWillDraw,omitempty" bson:"whiteWillDraw"`
+	BlackWillDraw  bool     `json:"blackWillDraw,omitempty" bson:"blackWillDraw"`
 	// Status      string   `json:"status" bson:"status" binding:"required,oneof=created started mate resign stalemate draw"`
 	// DrawType    string   `json:"drawType,omitempty" bson:"drawType" binding:"omitempty,oneof=material stalemate threefold fiftyMove mutual"`
 }

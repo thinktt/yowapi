@@ -409,23 +409,32 @@ func main() {
 			return
 		}
 
+		// RandomOverride sets the random value for engine moves in this game.
+		// It is intended for admin diagnostic tests and may later be replaced by
+		// a broader cmpOverride feature.
+		if newGame.RandomOverride != nil && !hasRole(c, "admin") {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "randomOverride requires admin role"})
+			return
+		}
+
 		now := time.Now().UnixMilli()
 		id, _ := games.GetGameID()
 
 		game := models.Game2{
-			ID:            id,
-			LichessID:     "",
-			CreatedAt:     now,
-			LastMoveAt:    now,
-			Winner:        "pending",
-			Method:        "",
-			Moves:         "",
-			MoveList:      []string{},
-			Tags:          newGame.Tags,
-			WhiteWillDraw: false,
-			BlackWillDraw: false,
-			WhitePlayer:   newGame.WhitePlayer,
-			BlackPlayer:   newGame.BlackPlayer,
+			ID:             id,
+			LichessID:      "",
+			CreatedAt:      now,
+			LastMoveAt:     now,
+			Winner:         "pending",
+			Method:         "",
+			Moves:          "",
+			MoveList:       []string{},
+			Tags:           newGame.Tags,
+			RandomOverride: newGame.RandomOverride,
+			WhiteWillDraw:  false,
+			BlackWillDraw:  false,
+			WhitePlayer:    newGame.WhitePlayer,
+			BlackPlayer:    newGame.BlackPlayer,
 		}
 
 		err := checkHasValidCMP(game)

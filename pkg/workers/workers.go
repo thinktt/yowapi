@@ -59,10 +59,11 @@ func RequestMove(game models.Game2) error {
 	}
 
 	moveReq := models.MoveReq{
-		Moves:     uciMoves,
-		CmpName:   cmpName,
-		GameId:    game.ID,
-		WorkerTag: workerTag,
+		Moves:          uciMoves,
+		CmpName:        cmpName,
+		GameId:         game.ID,
+		WorkerTag:      workerTag,
+		RandomOverride: game.RandomOverride,
 	}
 
 	// Publish one request. The durable response consumer applies the move later.
